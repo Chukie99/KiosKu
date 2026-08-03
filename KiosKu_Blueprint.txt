@@ -1,0 +1,366 @@
+# KiosKu – Blueprint Lengkap
+
+## 1. Ringkasan & Tujuan
+
+**Masalah:**
+Warung/toko kelontong butuh transaksi kasir yang cepat layaknya minimarket modern (misal Alfamart), tapi mayoritas software kasir yang ada mahal, butuh hardware scanner khusus, atau mengharuskan semua barang punya barcode tercetak. Kenyataannya banyak barang kelontong (beras, cabai, gula curah, dll) tidak punya barcode dari pabrik, sehingga proses input manual jadi lambat dan rawan salah hitung.
+
+**Solusi:**
+KiosKu adalah aplikasi kasir Android yang memanfaatkan kamera HP sebagai barcode scanner (tanpa perlu beli alat scanner terpisah), dan menyediakan cara cepat memilih barang tanpa barcode lewat daftar produk, kategori, pencarian, dan tombol favorit. Data produk, stok, dan transaksi tersimpan terpusat di PC/laptop toko yang bertindak sebagai server lokal, diakses oleh HP Android kasir melalui jaringan WiFi lokal (tanpa perlu internet/cloud).
+
+**Nilai Utama:**
+- Transaksi cepat tanpa perlu beli hardware barcode scanner mahal
+- Barang tanpa barcode tetap bisa dijual cepat lewat menu pilih/favorit
+- Stok otomatis berkurang & ada alert kalau mau habis
+- Laporan penjualan real-time (harian/bulanan, barang terlaris)
+- Data 100% milik toko sendiri, tersimpan lokal di PC, tidak bergantung cloud pihak ketiga
+- Gratis dari biaya payment gateway karena QRIS/e-wallet dikonfirmasi manual dulu
+
+## 2. Persona Pengguna
+
+| Persona | Kebutuhan Utama |
+|---|---|
+| **Pemilik Toko** | Melihat laporan omzet & barang laris, mengelola daftar produk & harga, memantau stok, melihat daftar utang pelanggan, memastikan data aman (backup) |
+| **Kasir** | Transaksi secepat mungkin, scan barcode atau pilih produk dengan mudah, hitung kembalian otomatis, cetak struk, catat utang pelanggan jika diminta |
+
+*(Catatan: pada versi ini, pemilik & kasir menggunakan akses yang sama tanpa pembeda role/login terpisah. Role-based access akan ditambahkan di fase berikutnya.)*
+
+## 3. Desain UI/UX
+
+### 3.1 Palet Warna
+
+| Nama | Hex | Fungsi |
+|---|---|---|
+| Primary Teal | `#0D6E6E` | Warna utama, tombol aksi utama, header |
+| Primary Dark | `#0A4F4F` | Hover/pressed state, teks pada primary |
+| Slate Blue | `#1E3A5F` | Aksen sekunder, elemen navigasi |
+| Success Green | `#16A34A` | Transaksi berhasil, stok cukup, lunas |
+| Warning Amber | `#D97706` | Stok menipis, utang mendekati jatuh tempo |
+| Danger Red | `#DC2626` | Stok habis, void transaksi, utang lewat jatuh tempo |
+| Background | `#F8FAFC` | Latar halaman (light mode) |
+| Surface | `#FFFFFF` | Kartu, panel, modal |
+| Text Primary | `#1E293B` | Teks utama |
+| Text Secondary | `#64748B` | Teks sekunder/caption |
+| Border | `#E2E8F0` | Garis pembatas, input border |
+
+### 3.2 Tipografi
+
+- **Font:** Inter (fallback: system default sans-serif) — dipilih karena angka/harga terbaca jelas, penting untuk konteks kasir
+- **Skala:**
+  - Display (total harga di layar kasir): 32px / Bold
+  - H1 (judul halaman): 22px / SemiBold
+  - H2 (sub judul/section): 18px / SemiBold
+  - Body: 14px / Regular
+  - Caption/label kecil: 12px / Medium
+- **Ketebalan:** Regular (400), Medium (500), SemiBold (600), Bold (700)
+
+### 3.3 Komponen UI & Library
+
+**Aplikasi Android (Flutter):**
+- Framework: Flutter 3.x + Dart, Material 3 dengan tema kustom (bukan default Material look)
+- Barcode scanning: `mobile_scanner`
+- Database lokal (cache offline): `sqflite`
+- HTTP client: `dio` (dengan interceptor untuk retry saat offline)
+- Cetak thermal (USB/Bluetooth): `esc_pos_bluetooth`, `esc_pos_utils`, `flutter_usb_printer`
+- Ikon: `lucide_icons` (Flutter package setara Lucide)
+- State management: `Riverpod`
+- Komponen kustom: `NumericKeypad`, `ProductGridCard`, `CategoryChip`, `CartLineItem`, `PaymentMethodSelector`, `ChangeCalculatorSheet`, `PinLockScreen`, `StockAlertBadge`, `FavoriteQuickButton`
+
+**Dashboard PC (React Web, disajikan oleh backend):**
+- Framework: React 18 + Vite + TypeScript
+- Styling: Tailwind CSS + shadcn/ui
+- Chart laporan: `recharts`
+- Ikon: `lucide-react`
+- Komponen kustom: `SalesChart`, `TopProductsTable`, `StockAlertList`, `DebtTrackerTable`, `ProductFormModal`, `ExportButton`
+
+### 3.4 Wireframe Halaman Utama
+
+**Halaman 1: Kasir (Home/POS Screen) — Android**
+- Layout: Header (nama toko + jam), area kiri daftar keranjang belanja (scrollable), area kanan tombol besar "Scan Barcode" dan "Pilih Produk", tombol favorit produk sebagai grid shortcut di bawah, footer menampilkan total harga besar + tombol "Bayar"
+- Elemen interaktif: tombol scan (buka kamera), tombol pilih produk (buka halaman kategori/pencarian), qty stepper (+/-) di tiap item keranjang, tombol hapus item, tombol void transaksi
+- State kosong: ilustrasi keranjang kosong + teks "Belum ada barang, scan atau pilih produk"
+- State loading: skeleton loading saat sinkronisasi data produk
+- State error: banner merah jika koneksi ke server (PC) terputus, otomatis beralih ke mode offline dengan indikator ikon
+
+**Halaman 2: Scan Barcode — Android**
+- Layout: Full-screen kamera dengan overlay kotak target scan, tombol flash & tombol input manual kode di bawah
+- Elemen interaktif: auto-detect saat barcode terdeteksi (getar/bunyi konfirmasi), tombol "Input Manual" jika kamera gagal baca
+- State kosong: tidak ada (selalu live camera)
+- State loading: indikator kecil saat memproses hasil scan
+- State error: pesan "Barcode tidak ditemukan di database" + opsi "Tambah produk baru"
+
+**Halaman 3: Pilih Produk (Kategori & Pencarian) — Android**
+- Layout: Search bar di atas, tab kategori horizontal (Sembako, Minuman, Snack, dll), grid produk dengan foto + nama + harga
+- Elemen interaktif: tap produk untuk pilih satuan (jika multi-satuan) lalu masuk keranjang, toggle bintang favorit per produk
+- State kosong: "Produk tidak ditemukan" + saran cek ejaan
+- State loading: skeleton grid saat memuat ribuan produk (pagination/lazy load)
+- State error: retry button jika gagal load dari server
+
+**Halaman 4: Pembayaran — Android**
+- Layout: Ringkasan total, pilihan metode bayar (Tunai / QRIS / E-Wallet / Split / Utang) sebagai tombol besar, jika Tunai muncul numeric keypad + kalkulasi kembalian otomatis
+- Elemen interaktif: keypad angka custom, toggle split payment (isi 2 metode sekaligus), pilih/tambah pelanggan jika metode "Utang"
+- State kosong: -
+- State loading: spinner saat menyimpan transaksi ke server
+- State error: pesan gagal simpan + tombol "Coba lagi" (transaksi tersimpan lokal dulu di mode offline)
+
+**Halaman 5: Struk & Riwayat Transaksi — Android**
+- Layout: Preview struk digital setelah bayar, tombol "Cetak Struk" & "Lewati", di halaman terpisah daftar riwayat transaksi (list dengan filter tanggal)
+- Elemen interaktif: tombol cetak ulang, tombol void/retur pada transaksi (dengan konfirmasi PIN)
+- State kosong: "Belum ada transaksi hari ini"
+- State loading: skeleton list
+- State error: pesan jika printer tidak terhubung + panduan sambungkan ulang
+
+**Halaman 6: Utang/Bon Pelanggan — Android**
+- Layout: Daftar pelanggan dengan total utang & status (lunas/belum/jatuh tempo), badge merah untuk yang lewat jatuh tempo
+- Elemen interaktif: tap pelanggan untuk lihat detail riwayat utang, tombol "Tandai Lunas" atau "Bayar Sebagian"
+- State kosong: "Belum ada catatan utang"
+- State loading: skeleton list
+- State error: banner offline jika data belum sinkron
+
+**Halaman 7: Dashboard Laporan — Web PC**
+- Layout: Sidebar navigasi (Laporan, Produk, Stok, Utang, Pengaturan), area utama berisi grafik omzet harian/bulanan, tabel barang terlaris, kartu ringkasan (total transaksi, omzet, rata-rata belanja)
+- Elemen interaktif: filter rentang tanggal, tombol export ke Excel/PDF
+- State kosong: "Belum ada data penjualan pada rentang ini"
+- State loading: skeleton chart & table
+- State error: pesan jika backend server tidak berjalan
+
+**Halaman 8: Kelola Produk — Web PC**
+- Layout: Tabel produk dengan kolom foto, nama, kategori, satuan, harga, stok; tombol "Tambah Produk" di kanan atas
+- Elemen interaktif: modal form tambah/edit produk (upload foto, generate kode otomatis, tambah satuan tambahan), toggle aktif/nonaktif produk
+- State kosong: "Belum ada produk, tambahkan produk pertama"
+- State loading: skeleton table
+- State error: validasi form (harga tidak boleh 0, dll)
+
+### 3.5 Gaya Visual
+- Ikon: Lucide (konsisten di Android via `lucide_icons` dan Web via `lucide-react`)
+- Border radius: 12px untuk card & tombol besar, 8px untuk input field, 999px (full round) untuk badge/chip
+- Shadow: soft shadow tipis (`0 2px 8px rgba(0,0,0,0.06)`) untuk card, tanpa shadow berat/neumorphism
+- Spacing: grid berbasis 8px (8, 16, 24, 32, 48)
+- Tombol utama besar (min height 56px) khusus di layar kasir agar mudah ditekan cepat
+
+## 4. Fitur & User Stories
+
+| ID | Fitur | User Story | Prioritas |
+|---|---|---|---|
+| F01 | Transaksi Kasir | Sebagai kasir, saya ingin menambah barang ke keranjang dan melihat total harga secara real-time | P0 |
+| F02 | Scan Barcode via Kamera | Sebagai kasir, saya ingin scan barcode barang pakai kamera HP agar tidak perlu ketik manual | P0 |
+| F03 | Pilih Produk Tanpa Barcode | Sebagai kasir, saya ingin memilih barang seperti beras/cabai dari daftar/kategori karena tidak ada barcode | P0 |
+| F04 | Kalkulator Kembalian Otomatis | Sebagai kasir, saya ingin sistem menghitung kembalian otomatis dari uang tunai yang diterima | P0 |
+| F05 | Cetak Struk Thermal (USB/BT) | Sebagai kasir, saya ingin mencetak struk lewat printer thermal yang tersambung ke HP | P0 |
+| F06 | Manajemen Stok Otomatis | Sebagai pemilik, saya ingin stok berkurang otomatis setiap ada transaksi | P0 |
+| F07 | Sinkronisasi Android–PC (LAN) | Sebagai pengguna, saya ingin data di HP dan PC selalu sinkron lewat WiFi lokal | P0 |
+| F08 | Kelola Produk | Sebagai pemilik, saya ingin menambah/mengedit produk beserta harga, stok, foto, dan kategori | P0 |
+| F09 | PIN Keamanan Aplikasi | Sebagai pemilik, saya ingin aplikasi terkunci PIN agar tidak sembarang orang bisa buka | P0 |
+| F10 | Pencarian & Kategori Produk | Sebagai kasir, saya ingin mencari produk dengan cepat di antara ribuan item lewat nama atau kategori | P0 |
+| F11 | Foto Produk | Sebagai kasir, saya ingin melihat foto produk agar lebih cepat mengenali barang yang dicari | P1 |
+| F12 | Kode Barang Otomatis & Multi-Satuan | Sebagai pemilik, saya ingin sistem membuat kode produk otomatis dan mendukung satuan ganda (kg/karung, batang/bungkus) | P1 |
+| F13 | Laporan Penjualan | Sebagai pemilik, saya ingin melihat laporan omzet harian/bulanan dan barang paling laris | P1 |
+| F14 | Alert Stok Menipis | Sebagai pemilik, saya ingin diberi tahu kalau stok barang hampir habis | P1 |
+| F15 | Utang/Bon Pelanggan | Sebagai kasir, saya ingin mencatat pelanggan yang belum bayar (ngutang) | P1 |
+| F16 | Reminder Utang Jatuh Tempo | Sebagai pemilik, saya ingin diingatkan otomatis untuk utang yang mendekati/lewat jatuh tempo | P1 |
+| F17 | Backup Data Otomatis | Sebagai pemilik, saya ingin data transaksi & stok dibackup otomatis agar tidak hilang jika PC bermasalah | P1 |
+| F18 | Void/Batalkan Transaksi | Sebagai kasir, saya ingin membatalkan transaksi yang salah input sebelum/sesudah tersimpan | P1 |
+| F19 | Riwayat & Retur Transaksi | Sebagai kasir, saya ingin melihat transaksi lalu dan memproses retur barang jika diperlukan | P1 |
+| F20 | Split Pembayaran | Sebagai kasir, saya ingin membagi satu transaksi menjadi dua metode bayar (misal sebagian tunai, sebagian QRIS) | P1 |
+| F21 | QRIS/E-Wallet Manual | Sebagai kasir, saya ingin menandai transaksi sebagai "lunas via QRIS/e-wallet" setelah cek manual di HP lain | P1 |
+| F22 | Export Laporan Excel/PDF | Sebagai pemilik, saya ingin mengekspor laporan penjualan ke Excel/PDF untuk pembukuan | P2 |
+| F23 | Mode Offline Sementara | Sebagai kasir, saya ingin tetap bisa bertransaksi walau WiFi ke PC putus sebentar, lalu data sync otomatis saat tersambung lagi | P2 |
+| F24 | Produk Favorit/Shortcut Cepat | Sebagai kasir, saya ingin tombol pintasan untuk barang yang paling sering dijual | P2 |
+| F25 | Role-Based Login (Pemilik vs Kasir) | Sebagai pemilik, saya ingin membedakan akses pemilik dan kasir | P3 (Future — di luar scope versi ini) |
+| F26 | Multi-Cabang Toko | Sebagai pemilik, saya ingin mengelola lebih dari satu cabang toko | P3 (Future) |
+
+## 5. User Flow (Diagram Mermaid)
+
+```mermaid
+graph TD
+  A[Kasir Buka Aplikasi] --> B{Kunci PIN?}
+  B -->|Benar| C[Halaman Kasir/Keranjang]
+  B -->|Salah| B
+  C --> D{Tambah Barang}
+  D -->|Scan Barcode| E[Buka Kamera Scan]
+  D -->|Pilih dari Daftar| F[Halaman Kategori/Pencarian/Favorit]
+  E --> G{Barcode Ditemukan?}
+  G -->|Ya| H[Tambah ke Keranjang]
+  G -->|Tidak| I[Tambah Produk Baru / Batal]
+  F --> H
+  H --> C
+  C --> J[Tekan Bayar]
+  J --> K{Pilih Metode Bayar}
+  K -->|Tunai| L[Input Uang Diterima -> Hitung Kembalian]
+  K -->|QRIS/E-Wallet| M[Cek Manual -> Tandai Lunas]
+  K -->|Split| N[Input Dua Metode Sekaligus]
+  K -->|Utang| O[Pilih/Tambah Pelanggan -> Catat Bon]
+  L --> P[Simpan Transaksi]
+  M --> P
+  N --> P
+  O --> P
+  P --> Q[Update Stok Otomatis]
+  Q --> R[Cetak Struk via Printer Thermal]
+  R --> S[Sinkron ke Server PC via LAN]
+  S --> T[Selesai - Kembali ke Halaman Kasir]
+```
+
+## 6. Arsitektur Sistem
+
+- **Frontend Android:** Flutter 3.x (Dart), Riverpod untuk state management, berjalan sebagai client yang terhubung ke backend via REST API di jaringan lokal (LAN)
+- **Frontend PC (Dashboard Web):** React 18 + TypeScript + Vite, Tailwind CSS + shadcn/ui, disajikan langsung oleh backend FastAPI sebagai static file, diakses via browser (`http://localhost:8000` atau IP LAN PC)
+- **Backend:** Python FastAPI + Uvicorn, berjalan sebagai server lokal di PC/laptop toko (bukan cloud), menangani seluruh logika bisnis (transaksi, stok, laporan, utang)
+- **Database:** SQLite (file `kiosku.db` tersimpan di PC), dipilih karena ringan, embedded, dan mudah untuk proses backup (cukup salin file)
+- **Autentikasi:** PIN lokal (disimpan hashed dengan bcrypt di tabel `app_settings`), tanpa layanan autentikasi eksternal karena skala 1 toko tanpa role terpisah
+- **Printer Thermal:** Terhubung langsung ke HP Android kasir via USB-OTG atau Bluetooth (ESC/POS command), bukan lewat PC
+- **Hosting:** Sepenuhnya lokal (on-premise) — backend berjalan di PC toko, Android terhubung via WiFi router lokal, tidak membutuhkan koneksi internet untuk operasional kasir sehari-hari
+- **Sinkronisasi Offline:** Android menyimpan transaksi sementara di SQLite lokal (`sqflite`) dengan flag `synced=false` saat koneksi ke PC putus, lalu otomatis push ke server saat koneksi kembali
+
+## 7. Skema Database (SQL)
+
+> Catatan: menggunakan SQL DDL langsung (bukan Prisma) karena backend menggunakan Python FastAPI + SQLAlchemy + SQLite.
+
+```sql
+CREATE TABLE categories (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL UNIQUE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE products (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    sku TEXT UNIQUE,                    -- kode barang, auto-generate jika tidak ada barcode
+    barcode TEXT UNIQUE,                -- NULL jika produk tidak punya barcode pabrik
+    name TEXT NOT NULL,
+    category_id INTEGER REFERENCES categories(id),
+    photo_path TEXT,                    -- path lokal foto produk
+    unit_base TEXT NOT NULL DEFAULT 'pcs',
+    price_buy REAL DEFAULT 0,           -- harga modal
+    price_sell REAL NOT NULL,           -- harga jual satuan dasar
+    stock REAL NOT NULL DEFAULT 0,
+    stock_alert_threshold REAL DEFAULT 5,
+    is_favorite BOOLEAN DEFAULT 0,
+    is_active BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+    updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE product_units (            -- multi-satuan (mis. rokok: batang & bungkus)
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    unit_name TEXT NOT NULL,
+    conversion_qty REAL NOT NULL,       -- jumlah unit_base per unit ini
+    price_sell REAL NOT NULL
+);
+
+CREATE TABLE customers (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    name TEXT NOT NULL,
+    phone TEXT,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE transactions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    invoice_no TEXT UNIQUE NOT NULL,
+    customer_id INTEGER REFERENCES customers(id),   -- NULL jika bukan transaksi utang
+    total_amount REAL NOT NULL,
+    discount_amount REAL DEFAULT 0,
+    payment_method TEXT NOT NULL,       -- 'tunai','qris','ewallet','split','utang'
+    cash_received REAL,
+    change_amount REAL,
+    payment_split_json TEXT,            -- detail rincian jika split payment
+    status TEXT NOT NULL DEFAULT 'selesai',  -- 'selesai','void','retur'
+    device_id TEXT,
+    synced BOOLEAN DEFAULT 1,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE transaction_items (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    transaction_id INTEGER NOT NULL REFERENCES transactions(id),
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    product_name_snapshot TEXT NOT NULL,
+    unit_name TEXT NOT NULL,
+    qty REAL NOT NULL,
+    price_per_unit REAL NOT NULL,
+    subtotal REAL NOT NULL
+);
+
+CREATE TABLE debts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    customer_id INTEGER NOT NULL REFERENCES customers(id),
+    transaction_id INTEGER REFERENCES transactions(id),
+    amount REAL NOT NULL,
+    amount_paid REAL DEFAULT 0,
+    status TEXT NOT NULL DEFAULT 'belum_lunas',  -- 'belum_lunas','sebagian','lunas'
+    due_date DATE,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE stock_logs (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    product_id INTEGER NOT NULL REFERENCES products(id),
+    change_qty REAL NOT NULL,           -- negatif = keluar, positif = masuk
+    reason TEXT NOT NULL,               -- 'transaksi','restock','retur','koreksi'
+    reference_id INTEGER,
+    created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+);
+
+CREATE TABLE app_settings (
+    key TEXT PRIMARY KEY,
+    value TEXT
+);
+```
+
+## 8. API Endpoints
+
+| Method | Endpoint | Deskripsi | Body/Query |
+|---|---|---|---|
+| POST | `/auth/verify-pin` | Verifikasi PIN aplikasi | `{ pin }` |
+| POST | `/auth/set-pin` | Set/ubah PIN aplikasi | `{ old_pin, new_pin }` |
+| GET | `/products` | Daftar produk (pagination + filter kategori) | `?page=&category_id=&favorite=` |
+| GET | `/products/search` | Cari produk berdasarkan nama | `?q=` |
+| GET | `/products/barcode/{code}` | Cari produk berdasarkan barcode | - |
+| POST | `/products` | Tambah produk baru | `{ name, category_id, price_sell, stock, photo, ... }` |
+| PUT | `/products/{id}` | Edit produk | `{ ...fields }` |
+| DELETE | `/products/{id}` | Nonaktifkan/hapus produk | - |
+| GET | `/categories` | Daftar kategori | - |
+| POST | `/categories` | Tambah kategori | `{ name }` |
+| POST | `/transactions` | Buat transaksi baru | `{ items[], payment_method, cash_received, customer_id? }` |
+| GET | `/transactions` | Riwayat transaksi | `?date_from=&date_to=` |
+| GET | `/transactions/{id}` | Detail transaksi | - |
+| POST | `/transactions/{id}/void` | Batalkan transaksi | `{ reason }` |
+| POST | `/transactions/{id}/return` | Proses retur barang | `{ items[] }` |
+| GET | `/reports/daily` | Laporan omzet harian | `?date=` |
+| GET | `/reports/monthly` | Laporan omzet bulanan | `?month=&year=` |
+| GET | `/reports/top-products` | Barang paling laris | `?date_from=&date_to=` |
+| GET | `/reports/export` | Export laporan Excel/PDF | `?format=xlsx\|pdf&date_from=&date_to=` |
+| GET | `/customers` | Daftar pelanggan | `?q=` |
+| POST | `/customers` | Tambah pelanggan | `{ name, phone }` |
+| GET | `/debts` | Daftar utang/bon | `?status=&customer_id=` |
+| POST | `/debts/{id}/pay` | Bayar/lunasi utang | `{ amount_paid }` |
+| GET | `/stock/alerts` | Daftar produk stok menipis | - |
+| POST | `/stock/adjust` | Koreksi stok manual | `{ product_id, change_qty, reason }` |
+| POST | `/sync/push` | Push transaksi offline dari Android ke server | `{ transactions[] }` |
+| GET | `/sync/pull` | Ambil data terbaru (produk/harga/stok) ke Android | `?since=` |
+| POST | `/backup/trigger` | Jalankan backup manual | - |
+| GET | `/backup/list` | Daftar file backup tersedia | - |
+
+## 9. Non-Functional Requirements
+
+- **Performa:** Respon API di jaringan lokal < 300ms; pencarian produk di antara ribuan item menggunakan index database (`sku`, `barcode`, `name`) agar tetap instan
+- **Keamanan:** PIN disimpan dalam bentuk hash (bcrypt), tidak ada data yang dikirim ke server pihak ketiga/cloud manapun — semua data tetap di jaringan lokal toko
+- **Reliabilitas:** Backup otomatis harian (copy file `kiosku.db` ke folder terpisah dengan timestamp), mode offline dengan antrian sinkronisasi otomatis retry
+- **Skalabilitas Data:** Database didesain menangani ribuan produk dan ribuan transaksi tanpa penurunan performa signifikan pada skala 1 toko
+- **Usability:** Elemen UI kasir berukuran besar dan kontras tinggi agar cepat dioperasikan; konfirmasi wajib sebelum aksi destruktif (void, hapus produk)
+- **Kompatibilitas:** Android 8.0 (API 26) ke atas; Windows 10/11 untuk server backend & dashboard
+- **Ketersediaan Offline:** Aplikasi kasir Android tetap berfungsi penuh tanpa internet, hanya membutuhkan jaringan WiFi lokal ke PC (mode offline sementara jika WiFi putus)
+- **Aksesibilitas:** Kontras warna teks-background memenuhi standar WCAG AA minimal, ukuran font dasar tidak lebih kecil dari 14px
+
+## 10. Instruksi untuk AI Developer (OpenCode CLI)
+
+Baca seluruh blueprint ini secara menyeluruh sebelum mulai coding. Bangun aplikasi **KiosKu** lengkap sesuai spesifikasi di atas, terdiri dari tiga bagian:
+
+1. **Backend** (Python FastAPI + SQLite) — implementasikan seluruh endpoint di Section 8, skema database di Section 7, termasuk logika bisnis: pengurangan stok otomatis saat transaksi, perhitungan kembalian, validasi void/retur, kalkulasi laporan, dan proses backup otomatis.
+2. **Aplikasi Android** (Flutter) — implementasikan seluruh halaman di Section 3.4, termasuk scan barcode kamera, mode offline dengan sinkronisasi otomatis, dan integrasi printer thermal USB/Bluetooth.
+3. **Dashboard Web PC** (React + shadcn/ui, disajikan oleh backend) — implementasikan halaman laporan dan kelola produk untuk diakses dari browser PC.
+
+Terapkan palet warna, tipografi, dan gaya visual di Section 3 secara konsisten di seluruh aplikasi (Android maupun Web) agar terlihat profesional dan bukan tampilan default/generic.
+
+**Jangan bertanya apapun. Langsung tulis semua kode yang diperlukan**, termasuk file konfigurasi (`requirements.txt`/`pubspec.yaml`/`package.json`), struktur folder project yang rapi, migrasi database awal, serta contoh data dummy (seed data) minimal 20 produk dengan berbagai kategori untuk keperluan testing awal. Jika ada ambiguitas teknis yang tidak dijelaskan di blueprint ini, gunakan asumsi terbaik yang sesuai dengan standar industri pengembangan aplikasi POS.
