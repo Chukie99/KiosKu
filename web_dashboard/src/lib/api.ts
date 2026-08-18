@@ -1,3 +1,21 @@
+const TOKEN_KEY = 'kiosku_auth_token'
+
+export function getToken(): string | null {
+  return localStorage.getItem(TOKEN_KEY)
+}
+
+export function setToken(token: string): void {
+  localStorage.setItem(TOKEN_KEY, token)
+}
+
+export function clearToken(): void {
+  localStorage.removeItem(TOKEN_KEY)
+}
+
+export function isTokenPresent(): boolean {
+  return !!localStorage.getItem(TOKEN_KEY)
+}
+
 export class ApiError extends Error {
   status: number
 
@@ -19,11 +37,20 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   if (options.body && typeof options.body === 'string') {
     headers['Content-Type'] = 'application/json'
   }
+  const token = getToken()
+  if (token) {
+    headers['Authorization'] = `Bearer ${token}`
+  }
   let res: Response
   try {
     res = await fetch(path, { ...options, headers })
   } catch {
     throw new ApiError(0, 'Tidak dapat terhubung ke server')
+  }
+  if (res.status === 401) {
+    clearToken()
+    window.location.hash = '#/login'
+    throw new ApiError(401, 'Sesi berakhir, silakan login ulang')
   }
   if (!res.ok) {
     let message = `Terjadi kesalahan (${res.status})`

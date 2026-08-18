@@ -5,6 +5,7 @@ from sqlalchemy import select
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
+from ..dependencies import require_auth
 from ..models import Product, Transaction
 from ..schemas import SyncPushIn
 from .products import product_to_dict
@@ -14,7 +15,11 @@ router = APIRouter()
 
 
 @router.post("/sync/push")
-def sync_push(data: SyncPushIn, db: Session = Depends(get_db)):
+def sync_push(
+    data: SyncPushIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     results = []
     for item in data.transactions:
         exists = db.scalar(select(Transaction).where(Transaction.invoice_no == item.invoice_no))
@@ -49,7 +54,11 @@ def sync_push(data: SyncPushIn, db: Session = Depends(get_db)):
 
 
 @router.get("/sync/pull")
-def sync_pull(since: str | None = None, db: Session = Depends(get_db)):
+def sync_pull(
+    since: str | None = None,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     products_q = select(Product).options(joinedload(Product.category), joinedload(Product.units))
     if since:
         products_q = products_q.where(Product.updated_at >= since)

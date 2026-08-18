@@ -1,3 +1,5 @@
+import 'dart:io';
+
 import 'package:dio/dio.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 
@@ -7,8 +9,14 @@ class ApiException implements Exception {
   final String message;
   final bool offline;
   final bool notFound;
+  final bool unauthorized;
 
-  const ApiException(this.message, {this.offline = false, this.notFound = false});
+  const ApiException(
+    this.message, {
+    this.offline = false,
+    this.notFound = false,
+    this.unauthorized = false,
+  });
 
   @override
   String toString() => message;
@@ -38,15 +46,19 @@ class TxPage {
 class VerifyPinResult {
   final bool ok;
   final bool pinSet;
+  final String? token;
 
-  const VerifyPinResult({required this.ok, required this.pinSet});
+  const VerifyPinResult({required this.ok, required this.pinSet, this.token});
 }
 
 class ApiClient {
   static const String defaultBaseUrl = 'http://192.168.1.100:8000';
+  static const String _tokenKey = 'auth_token';
 
   final Dio _dio;
   String? _baseUrl;
+  String? _token;
+  void Function()? _onUnauthorized;
 
   ApiClient({String? baseUrl})
       : _dio = Dio(BaseOptions(
@@ -57,9 +69,29 @@ class ApiClient {
           headers: {'Content-Type': 'application/json'},
         )) {
     _baseUrl = baseUrl;
+    _dio.interceptors.add(InterceptorsWrapper(
+      onRequest: (options, handler) {
+        if (_token != null) {
+          options.headers['Authorization'] = 'Bearer $_token';
+        }
+        handler.next(options);
+      },
+      onError: (error, handler) {
+        if (error.response?.statusCode == 401) {
+          _token = null;
+          _onUnauthorized?.call();
+        }
+        handler.next(error);
+      },
+    ));
   }
 
   String get baseUrl => _baseUrl ?? defaultBaseUrl;
+  String? get token => _token;
+
+  set onUnauthorized(void Function()? callback) {
+    _onUnauthorized = callback;
+  }
 
   Future<void> _ensureBaseUrl() async {
     if (_baseUrl != null) return;
@@ -75,6 +107,23 @@ class ApiClient {
     _dio.options.baseUrl = url;
   }
 
+  Future<void> loadToken() async {
+    final prefs = await SharedPreferences.getInstance();
+    _token = prefs.getString(_tokenKey);
+  }
+
+  Future<void> saveToken(String token) async {
+    _token = token;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.setString(_tokenKey, token);
+  }
+
+  Future<void> clearToken() async {
+    _token = null;
+    final prefs = await SharedPreferences.getInstance();
+    await prefs.remove(_tokenKey);
+  }
+
   ApiException _mapError(DioException e) {
     if (e.type == DioExceptionType.connectionTimeout ||
         e.type == DioExceptionType.receiveTimeout ||
@@ -88,7 +137,7 @@ class ApiClient {
         return const ApiException('Data tidak ditemukan', notFound: true);
       }
       if (code == 401) {
-        return const ApiException('PIN salah');
+        return const ApiException('Sesi berakhir, silakan login ulang', unauthorized: true);
       }
       return ApiException('Kesalahan server ($code)');
     }
@@ -120,10 +169,28 @@ class ApiClient {
       () => _dio.post<dynamic>('/auth/verify-pin', data: {'pin': pin}),
     );
     final map = (data is Map) ? Map<String, dynamic>.from(data) : <String, dynamic>{};
-    return VerifyPinResult(
+    final result = VerifyPinResult(
       ok: map['ok'] == true,
       pinSet: map['pin_set'] == true,
+      token: map['token'] as String?,
     );
+    if (result.ok && result.token != null) {
+      await saveToken(result.token!);
+    }
+    return result;
+  }
+
+  Future<bool> logout() async {
+    await _ensureBaseUrl();
+    try {
+      final data = await _wrap(() => _dio.post<dynamic>('/auth/logout'));
+      await clearToken();
+      if (data is Map) return data['ok'] == true;
+      return false;
+    } on ApiException {
+      await clearToken();
+      return false;
+    }
   }
 
   Future<bool> setPin({String? oldPin, required String newPin}) async {
@@ -161,6 +228,7 @@ class ApiClient {
     int pageSize = 50,
     int? categoryId,
     bool? favorite,
+    bool includeInactive = false,
   }) async {
     await _ensureBaseUrl();
     final data = await _wrap(
@@ -169,6 +237,7 @@ class ApiClient {
         'page_size': pageSize,
         if (categoryId != null) 'category_id': categoryId,
         if (favorite != null) 'favorite': favorite,
+        if (includeInactive) 'include_inactive': true,
       }),
     );
     final map = (data is Map) ? Map<String, dynamic>.from(data) : <String, dynamic>{};
@@ -254,6 +323,146 @@ class ApiClient {
     return Product.fromJson(
       (data is Map) ? Map<String, dynamic>.from(data) : <String, dynamic>{},
     );
+  }
+
+  Future<Product> updateProduct(int id, Map<String, dynamic> payload) async {
+    await _ensureBaseUrl();
+    final data = await _wrap(
+      () => _dio.put<dynamic>('/products/$id', data: payload),
+    );
+    return Product.fromJson(
+      (data is Map) ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+    );
+  }
+
+  Future<bool> deleteProduct(int id) async {
+    await _ensureBaseUrl();
+    final data = await _wrap(() => _dio.delete<dynamic>('/products/$id'));
+    if (data is Map) return data['ok'] == true;
+    return false;
+  }
+
+  Future<List<StockAlert>> getStockAlerts() async {
+    await _ensureBaseUrl();
+    final data = await _wrap(() => _dio.get<dynamic>('/stock/alerts'));
+    if (data is! List) return [];
+    return data
+        .whereType<Map>()
+        .map((e) => StockAlert.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<List<StockLog>> getStockLogs({int limit = 100}) async {
+    await _ensureBaseUrl();
+    final data = await _wrap(
+      () => _dio.get<dynamic>('/stock/logs', queryParameters: {'limit': limit}),
+    );
+    if (data is! List) return [];
+    return data
+        .whereType<Map>()
+        .map((e) => StockLog.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<ReportSummary> getReportSummary() async {
+    await _ensureBaseUrl();
+    final data = await _wrap(() => _dio.get<dynamic>('/reports/summary'));
+    final map = (data is Map) ? Map<String, dynamic>.from(data) : <String, dynamic>{};
+    final today = map['today'];
+    return today is Map
+        ? ReportSummary.fromJson(Map<String, dynamic>.from(today))
+        : const ReportSummary(
+            totalTransactions: 0,
+            omzet: 0,
+            avgBelanja: 0,
+            itemsSold: 0,
+          );
+  }
+
+  Future<MonthlyReport> getReportMonthly({int? month, int? year}) async {
+    await _ensureBaseUrl();
+    final data = await _wrap(
+      () => _dio.get<dynamic>('/reports/monthly', queryParameters: {
+        if (month != null) 'month': month,
+        if (year != null) 'year': year,
+      }),
+    );
+    return MonthlyReport.fromJson(
+      (data is Map) ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+    );
+  }
+
+  Future<DailyReport> getReportDaily(String date) async {
+    await _ensureBaseUrl();
+    final data = await _wrap(
+      () => _dio.get<dynamic>('/reports/daily', queryParameters: {'dt': date}),
+    );
+    return DailyReport.fromJson(
+      (data is Map) ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+    );
+  }
+
+  Future<List<TopProduct>> getTopProducts({int limit = 10}) async {
+    await _ensureBaseUrl();
+    final data = await _wrap(
+      () => _dio.get<dynamic>(
+        '/reports/top-products',
+        queryParameters: {'limit': limit},
+      ),
+    );
+    if (data is! List) return [];
+    return data
+        .whereType<Map>()
+        .map((e) => TopProduct.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<List<BackupFile>> getBackupList() async {
+    await _ensureBaseUrl();
+    final data = await _wrap(() => _dio.get<dynamic>('/backup/list'));
+    if (data is! List) return [];
+    return data
+        .whereType<Map>()
+        .map((e) => BackupFile.fromJson(Map<String, dynamic>.from(e)))
+        .toList();
+  }
+
+  Future<bool> restoreBackup(String filename) async {
+    await _ensureBaseUrl();
+    final data = await _wrap(
+      () => _dio.post<dynamic>('/backup/restore', queryParameters: {
+        'filename': filename,
+      }),
+    );
+    if (data is Map) return data['ok'] == true;
+    return false;
+  }
+
+  Future<HealthInfo> getHealth() async {
+    await _ensureBaseUrl();
+    final data = await _wrap(() => _dio.get<dynamic>('/health'));
+    return HealthInfo.fromJson(
+      (data is Map) ? Map<String, dynamic>.from(data) : <String, dynamic>{},
+    );
+  }
+
+  Future<String> exportReport({
+    required String format,
+    required String dateFrom,
+    required String dateTo,
+    required String savePath,
+  }) async {
+    await _ensureBaseUrl();
+    await _dio.download(
+      '/reports/export',
+      savePath,
+      queryParameters: {
+        'format': format,
+        'date_from': dateFrom,
+        'date_to': dateTo,
+      },
+    );
+    return savePath;
   }
 
   Future<Transaction> createTransaction({
@@ -418,5 +627,20 @@ class ApiClient {
     final data = await _wrap(() => _dio.post<dynamic>('/backup/trigger'));
     if (data is Map) return data['ok'] == true;
     return false;
+  }
+
+  Future<String?> uploadProductPhoto(int productId, String filePath) async {
+    await _ensureBaseUrl();
+    final fileName = filePath.split(Platform.pathSeparator).last.split('/').last;
+    final formData = FormData.fromMap({
+      'file': await MultipartFile.fromFile(filePath, filename: fileName),
+    });
+    final data = await _wrap(
+      () => _dio.post<dynamic>('/products/$productId/photo', data: formData),
+    );
+    if (data is Map && data['ok'] == true) {
+      return data['photo_path'] as String?;
+    }
+    return null;
   }
 }

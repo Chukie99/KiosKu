@@ -23,11 +23,16 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
   bool _savingStore = false;
   bool _syncing = false;
   bool _backingUp = false;
+  bool _loadingBackups = false;
+  List<BackupFile> _backups = [];
+  HealthInfo? _health;
 
   @override
   void initState() {
     super.initState();
     _loadPrefs();
+    _loadBackups();
+    _loadHealth();
   }
 
   Future<void> _loadPrefs() async {
@@ -39,6 +44,28 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       _serverController.text = serverUrl;
       _storeController.text = storeName;
     });
+  }
+
+  Future<void> _loadBackups() async {
+    setState(() => _loadingBackups = true);
+    try {
+      final list = await ref.read(apiProvider).getBackupList();
+      if (!mounted) return;
+      setState(() => _backups = list);
+    } on ApiException {
+      if (!mounted) return;
+      setState(() => _backups = []);
+    } finally {
+      if (mounted) setState(() => _loadingBackups = false);
+    }
+  }
+
+  Future<void> _loadHealth() async {
+    try {
+      final health = await ref.read(apiProvider).getHealth();
+      if (!mounted) return;
+      setState(() => _health = health);
+    } catch (_) {}
   }
 
   Future<void> _saveServerUrl() async {
@@ -176,6 +203,7 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
     setState(() => _backingUp = true);
     try {
       final ok = await ref.read(apiProvider).triggerBackup();
+      await _loadBackups();
       if (!mounted) return;
       ScaffoldMessenger.of(context).showSnackBar(
         SnackBar(
@@ -191,6 +219,53 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
       );
     } finally {
       if (mounted) setState(() => _backingUp = false);
+    }
+  }
+
+  Future<void> _restoreBackup(BackupFile file) async {
+    final confirmed = await showDialog<bool>(
+      context: context,
+      builder: (dialogContext) {
+        return AlertDialog(
+          title: const Text('Restore Backup'),
+          content: Text(
+            'Restore "${file.filename}"?\n\nData saat ini akan dibackup otomatis '
+            'sebelum dipulihkan. Server perlu di-restart setelah restore.',
+          ),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.pop(dialogContext, false),
+              child: const Text('Batal'),
+            ),
+            FilledButton(
+              style: FilledButton.styleFrom(
+                backgroundColor: AppColors.danger,
+              ),
+              onPressed: () => Navigator.pop(dialogContext, true),
+              child: const Text('Restore'),
+            ),
+          ],
+        );
+      },
+    );
+    if (confirmed != true) return;
+    try {
+      final ok = await ref.read(apiProvider).restoreBackup(file.filename);
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(
+          content: Text(
+            ok
+                ? 'Restore berhasil — restart server untuk memuat data'
+                : 'Restore gagal',
+          ),
+        ),
+      );
+    } on ApiException catch (e) {
+      if (!mounted) return;
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text(e.message)),
+      );
     }
   }
 
@@ -394,6 +469,96 @@ class _SettingsPageState extends ConsumerState<SettingsPage> {
                               ),
                         label: const Text('Backup Database'),
                       ),
+                      const SizedBox(height: 12),
+                      if (_loadingBackups)
+                        const Center(
+                          child: SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          ),
+                        )
+                      else if (_backups.isEmpty)
+                        const Text(
+                          'Belum ada file backup',
+                          style: TextStyle(
+                            fontSize: 13,
+                            color: AppColors.textSecondary,
+                          ),
+                        )
+                      else
+                        for (final file in _backups)
+                          Padding(
+                            padding: const EdgeInsets.symmetric(vertical: 2),
+                            child: Row(
+                              children: [
+                                const Icon(
+                                  LucideIcons.fileText,
+                                  size: 16,
+                                  color: AppColors.textSecondary,
+                                ),
+                                const SizedBox(width: 8),
+                                Expanded(
+                                  child: Column(
+                                    crossAxisAlignment:
+                                        CrossAxisAlignment.start,
+                                    children: [
+                                      Text(
+                                        file.filename,
+                                        style: const TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.w600,
+                                          color: AppColors.textPrimary,
+                                        ),
+                                      ),
+                                      Text(
+                                        '${file.sizeLabel} · ${formatDateTime(file.createdAt)}',
+                                        style: const TextStyle(
+                                          fontSize: 11,
+                                          color: AppColors.textSecondary,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                                TextButton(
+                                  onPressed: () => _restoreBackup(file),
+                                  child: const Text('Restore'),
+                                ),
+                              ],
+                            ),
+                          ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+                _SectionCard(
+                  title: 'Info Server',
+                  icon: LucideIcons.server,
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [
+                      _InfoRow(
+                        label: 'Status',
+                        value: _health == null
+                            ? 'Memuat...'
+                            : _health!.isOk
+                                ? 'Sehat'
+                                : 'Bermasalah',
+                        valueColor: _health == null
+                            ? AppColors.textSecondary
+                            : _health!.isOk
+                                ? AppColors.success
+                                : AppColors.danger,
+                      ),
+                      _InfoRow(
+                        label: 'Aplikasi',
+                        value: _health?.app ?? '-',
+                      ),
+                      _InfoRow(
+                        label: 'Waktu Server',
+                        value: formatDateTime(_health?.time),
+                      ),
                     ],
                   ),
                 ),
@@ -454,6 +619,41 @@ class _SectionCard extends StatelessWidget {
             child,
           ],
         ),
+      ),
+    );
+  }
+}
+
+class _InfoRow extends StatelessWidget {
+  final String label;
+  final String value;
+  final Color? valueColor;
+
+  const _InfoRow({required this.label, required this.value, this.valueColor});
+
+  @override
+  Widget build(BuildContext context) {
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 4),
+      child: Row(
+        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+        children: [
+          Text(
+            label,
+            style: const TextStyle(
+              fontSize: 13,
+              color: AppColors.textSecondary,
+            ),
+          ),
+          Text(
+            value,
+            style: TextStyle(
+              fontSize: 13,
+              fontWeight: FontWeight.w700,
+              color: valueColor ?? AppColors.textPrimary,
+            ),
+          ),
+        ],
       ),
     );
   }

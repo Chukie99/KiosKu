@@ -6,6 +6,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
+from ..dependencies import require_auth
 from ..models import Product, StockLog, Transaction, TransactionItem
 
 router = APIRouter()
@@ -21,7 +22,11 @@ def _summarize(rows: list) -> dict:
 
 
 @router.get("/reports/daily")
-def daily_report(dt: str | None = None, db: Session = Depends(get_db)):
+def daily_report(
+    dt: str | None = None,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     day = dt or datetime.now().strftime("%Y-%m-%d")
     rows = db.scalars(
         select(Transaction)
@@ -37,7 +42,12 @@ def daily_report(dt: str | None = None, db: Session = Depends(get_db)):
 
 
 @router.get("/reports/monthly")
-def monthly_report(month: int | None = None, year: int | None = None, db: Session = Depends(get_db)):
+def monthly_report(
+    month: int | None = None,
+    year: int | None = None,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     now = datetime.now()
     m = month or now.month
     y = year or now.year
@@ -55,7 +65,13 @@ def monthly_report(month: int | None = None, year: int | None = None, db: Sessio
 
 
 @router.get("/reports/top-products")
-def top_products(date_from: str | None = None, date_to: str | None = None, limit: int = 10, db: Session = Depends(get_db)):
+def top_products(
+    date_from: str | None = None,
+    date_to: str | None = None,
+    limit: int = 10,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     q = (
         select(
             TransactionItem.product_id,
@@ -83,7 +99,10 @@ def top_products(date_from: str | None = None, date_to: str | None = None, limit
 
 
 @router.get("/reports/summary")
-def reports_summary(db: Session = Depends(get_db)):
+def reports_summary(
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     today = datetime.now().strftime("%Y-%m-%d")
     monthly_start = datetime.now().replace(day=1)
     today_rows = db.scalars(select(Transaction).where(Transaction.created_at >= f"{today} 00:00:00")).all()
@@ -178,7 +197,13 @@ def _generate_pdf(date_from: str, date_to: str, db: Session) -> bytes:
 
 
 @router.get("/reports/export")
-def export_report(format: str = "xlsx", date_from: str | None = None, date_to: str | None = None, db: Session = Depends(get_db)):
+def export_report(
+    format: str = "xlsx",
+    date_from: str | None = None,
+    date_to: str | None = None,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     if format not in ("xlsx", "pdf"):
         raise HTTPException(status_code=422, detail="Format harus xlsx atau pdf")
     date_to = date_to or datetime.now().strftime("%Y-%m-%d")

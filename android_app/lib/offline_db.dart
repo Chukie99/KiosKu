@@ -1,7 +1,7 @@
 import 'dart:convert';
 
 import 'package:path/path.dart' as p;
-import 'package:sqflite/sqflite.dart';
+import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 
 import 'models.dart';
 
@@ -62,6 +62,8 @@ class OfflineDatabase {
   }
 
   Future<void> init() async {
+    sqfliteFfiInit();
+    databaseFactory = databaseFactoryFfi;
     await database;
   }
 
@@ -193,6 +195,14 @@ class OfflineDatabase {
       {'is_favorite': favorite ? 1 : 0},
       where: 'id = ?',
       whereArgs: [productId],
+    );
+  }
+
+  Future<void> decrementStockLocal(int productId, double qty) async {
+    final db = await database;
+    await db.rawUpdate(
+      'UPDATE products SET stock = MAX(0, stock - ?) WHERE id = ?',
+      [qty, productId],
     );
   }
 

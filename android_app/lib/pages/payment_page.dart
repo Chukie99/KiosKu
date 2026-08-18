@@ -355,6 +355,9 @@ class _PaymentPageState extends ConsumerState<PaymentPage> {
       if (!mounted) return;
       if (e.offline) {
         await db.insertPendingTransaction(payload);
+        for (final item in cart) {
+          await db.decrementStockLocal(item.product.id, item.qty);
+        }
         final localTx = localTransactionFromPayload(payload);
         if (!mounted) return;
         await _goReceipt(localTx, pending: true);

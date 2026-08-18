@@ -3,7 +3,9 @@ from sqlalchemy.orm import Session
 
 from ..auth import get_store_name, is_pin_set, set_pin, set_setting, verify_pin
 from ..database import get_db
+from ..dependencies import require_auth
 from ..schemas import PinSetIn, PinVerifyIn
+from ..session import store
 
 router = APIRouter()
 
@@ -12,7 +14,16 @@ router = APIRouter()
 def verify(data: PinVerifyIn, db: Session = Depends(get_db)):
     if not is_pin_set(db):
         return {"ok": True, "pin_set": False}
-    return {"ok": verify_pin(db, data.pin), "pin_set": True}
+    if not verify_pin(db, data.pin):
+        return {"ok": False, "pin_set": True}
+    session = store.create()
+    return {"ok": True, "pin_set": True, "token": session.token}
+
+
+@router.post("/auth/logout")
+def logout(token: str = Depends(require_auth)):
+    store.invalidate(token)
+    return {"ok": True}
 
 
 @router.post("/auth/set-pin")
@@ -37,7 +48,11 @@ def get_settings(db: Session = Depends(get_db)):
 
 
 @router.put("/settings")
-def update_settings(payload: dict, db: Session = Depends(get_db)):
+def update_settings(
+    payload: dict,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     if "store_name" in payload:
         set_setting(db, "store_name", str(payload["store_name"]))
     if "backup_hour" in payload:

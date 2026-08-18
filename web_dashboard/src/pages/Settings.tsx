@@ -205,7 +205,7 @@ export default function Settings() {
 
       <Card className="p-6">
         <div className="mb-4 flex items-center gap-2">
-          <Server size={18} className="text-slateBlue" />
+          <Server size={18} className="text-accentGreen" />
           <h2 className="text-base font-bold text-textPrimary">Info Server</h2>
         </div>
         {health && (

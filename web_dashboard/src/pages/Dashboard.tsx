@@ -27,7 +27,7 @@ const CARD_STYLES = [
   { icon: ReceiptText, bg: 'bg-primary/10 text-primary', label: 'Transaksi Hari Ini' },
   { icon: Banknote, bg: 'bg-success/10 text-success', label: 'Omzet Hari Ini' },
   { icon: TrendingUp, bg: 'bg-warning/10 text-warning', label: 'Omzet Bulan Ini' },
-  { icon: ShoppingCart, bg: 'bg-slateBlue/10 text-slateBlue', label: 'Rata-rata Belanja' },
+  { icon: ShoppingCart, bg: 'bg-accentGreen/10 text-accentGreen', label: 'Rata-rata Belanja' },
 ]
 
 export default function Dashboard() {

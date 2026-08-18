@@ -151,7 +151,7 @@ export default function Reports() {
     { icon: ReceiptText, bg: 'bg-primary/10 text-primary', label: `Transaksi (Rentang)`, value: formatAngka(transactions.length), sub: `${formatAngka(rangeSummary.items, 0)} item terjual` },
     { icon: Banknote, bg: 'bg-success/10 text-success', label: 'Omzet (Rentang)', value: formatRupiah(rangeSummary.omzet), sub: `${from} s/d ${to}` },
     { icon: BarChart3, bg: 'bg-warning/10 text-warning', label: `Omzet ${formatTanggalFromIso(daily?.date)}`, value: formatRupiah(daily?.summary.omzet ?? 0), sub: `${daily?.transactions ?? 0} transaksi` },
-    { icon: TrendingUp, bg: 'bg-slateBlue/10 text-slateBlue', label: 'Omzet Bulan Ini', value: formatRupiah(monthly?.summary.omzet ?? 0), sub: `${monthly?.summary.total_transactions ?? 0} transaksi` },
+    { icon: TrendingUp, bg: 'bg-accentGreen/10 text-accentGreen', label: 'Omzet Bulan Ini', value: formatRupiah(monthly?.summary.omzet ?? 0), sub: `${monthly?.summary.total_transactions ?? 0} transaksi` },
   ]
 
   return (

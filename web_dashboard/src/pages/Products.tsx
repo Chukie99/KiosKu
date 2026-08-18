@@ -115,6 +115,8 @@ export default function Products() {
   const [catName, setCatName] = useState('')
   const [catSaving, setCatSaving] = useState(false)
   const [catError, setCatError] = useState<string | null>(null)
+  const [photoFile, setPhotoFile] = useState<File | null>(null)
+  const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
   const load = useCallback(async () => {
     setLoading(true)
@@ -174,6 +176,8 @@ export default function Products() {
     setEditing(null)
     setForm(EMPTY_FORM)
     setFormError(null)
+    setPhotoFile(null)
+    setPhotoPreview(null)
     setModalOpen(true)
   }
 
@@ -193,6 +197,8 @@ export default function Products() {
       units: p.units.map((u) => ({ unit_name: u.unit_name, conversion_qty: String(u.conversion_qty), price_sell: String(u.price_sell) })),
     })
     setFormError(null)
+    setPhotoFile(null)
+    setPhotoPreview(p.photo_path ? `/photos/${p.photo_path}` : null)
     setModalOpen(true)
   }
 
@@ -213,6 +219,20 @@ export default function Products() {
 
   const removeUnit = (index: number) => {
     setForm((f) => ({ ...f, units: f.units.filter((_, i) => i !== index) }))
+  }
+
+  const uploadPhoto = async (productId: number) => {
+    if (!photoFile) return
+    const formData = new FormData()
+    formData.append('file', photoFile)
+    try {
+      await api(`/products/${productId}/photo`, {
+        method: 'POST',
+        body: formData,
+      })
+    } catch {
+      // foto opsional, gagal upload bukan block
+    }
   }
 
   const submit = async () => {
@@ -245,8 +265,10 @@ export default function Products() {
       }
       if (editing) {
         await api(`/products/${editing.id}`, { method: 'PUT', body: JSON.stringify(payload) })
+        await uploadPhoto(editing.id)
       } else {
-        await api('/products', { method: 'POST', body: JSON.stringify(payload) })
+        const res = await api<{ id: number }>('/products', { method: 'POST', body: JSON.stringify(payload) })
+        await uploadPhoto(res.id)
       }
       setModalOpen(false)
       await load()
@@ -394,8 +416,12 @@ export default function Products() {
                 <Tr key={p.id} onClick={() => openEdit(p)}>
                   <Td>
                     <div className="flex items-center gap-3">
-                      <div className="flex h-10 w-10 shrink-0 items-center justify-center rounded-lg border border-border bg-background">
-                        <Package size={18} className="text-textSecondary" />
+                      <div className="flex h-10 w-10 shrink-0 items-center justify-center overflow-hidden rounded-lg border border-border bg-background">
+                        {p.photo_path ? (
+                          <img src={`/photos/${p.photo_path}`} alt={p.name} className="h-full w-full object-cover" />
+                        ) : (
+                          <Package size={18} className="text-textSecondary" />
+                        )}
                       </div>
                       <div className="min-w-0">
                         <p className="max-w-[220px] truncate font-medium text-textPrimary">{p.name}</p>
@@ -474,7 +500,33 @@ export default function Products() {
           {formError && (
             <div className="rounded-lg border border-danger/30 bg-danger/5 px-3 py-2 text-xs font-medium text-danger">{formError}</div>
           )}
-          <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
+          <div className="flex items-start gap-4">
+            <div className="shrink-0">
+              <label className="mb-1 block text-xs font-semibold text-textSecondary">Foto Produk</label>
+              <label className="flex h-24 w-24 cursor-pointer flex-col items-center justify-center rounded-xl border-2 border-dashed border-border bg-background transition-colors hover:border-primary/40 hover:bg-primary/5">
+                {photoPreview ? (
+                  <img src={photoPreview} alt="Preview" className="h-full w-full rounded-xl object-cover" />
+                ) : (
+                  <>
+                    <Package size={24} className="text-textSecondary" />
+                    <span className="mt-1 text-[10px] text-textSecondary">Pilih Foto</span>
+                  </>
+                )}
+                <input
+                  type="file"
+                  accept="image/jpeg,image/png,image/webp"
+                  className="hidden"
+                  onChange={(e) => {
+                    const file = e.target.files?.[0]
+                    if (file) {
+                      setPhotoFile(file)
+                      setPhotoPreview(URL.createObjectURL(file))
+                    }
+                  }}
+                />
+              </label>
+            </div>
+            <div className="flex-1 space-y-4">
             <div className="sm:col-span-2">
               <label className="mb-1 block text-xs font-semibold text-textSecondary">Nama Produk *</label>
               <Input value={form.name} onChange={(e) => setField('name', e.target.value)} placeholder="Mis. Indomie Goreng" />
@@ -520,6 +572,7 @@ export default function Products() {
             <div>
               <label className="mb-1 block text-xs font-semibold text-textSecondary">Ambang Batas Alert</label>
               <Input type="number" min="0" step="any" value={form.stock_alert_threshold} onChange={(e) => setField('stock_alert_threshold', e.target.value)} placeholder="5" />
+            </div>
             </div>
           </div>
 

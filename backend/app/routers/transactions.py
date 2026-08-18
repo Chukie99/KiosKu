@@ -6,6 +6,7 @@ from sqlalchemy.orm import Session, joinedload
 
 from ..auth import get_store_name
 from ..database import get_db
+from ..dependencies import require_auth
 from ..models import Customer, Debt, Product, StockLog, Transaction, TransactionItem
 from ..schemas import CustomerIn, DebtPayIn, ReturnIn, TransactionIn, VoidIn
 
@@ -140,7 +141,11 @@ def create_transaction_core(
 
 
 @router.post("/transactions", status_code=201)
-def create_transaction(data: TransactionIn, db: Session = Depends(get_db)):
+def create_transaction(
+    data: TransactionIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     split_json = None
     if data.payment_method == "split" and data.payment_split:
         split_json = str([s.model_dump() for s in data.payment_split])
@@ -173,6 +178,7 @@ def list_transactions(
     page: int = 1,
     page_size: int = 50,
     db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
 ):
     q = select(Transaction).options(joinedload(Transaction.items))
     if date_from:
@@ -187,7 +193,11 @@ def list_transactions(
 
 
 @router.get("/transactions/{tx_id}")
-def get_transaction(tx_id: int, db: Session = Depends(get_db)):
+def get_transaction(
+    tx_id: int,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     t = db.scalar(select(Transaction).where(Transaction.id == tx_id).options(joinedload(Transaction.items)))
     if t is None:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
@@ -195,7 +205,12 @@ def get_transaction(tx_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/transactions/{tx_id}/void")
-def void_transaction(tx_id: int, data: VoidIn, db: Session = Depends(get_db)):
+def void_transaction(
+    tx_id: int,
+    data: VoidIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     t = db.scalar(select(Transaction).where(Transaction.id == tx_id).options(joinedload(Transaction.items)))
     if t is None:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
@@ -211,7 +226,12 @@ def void_transaction(tx_id: int, data: VoidIn, db: Session = Depends(get_db)):
 
 
 @router.post("/transactions/{tx_id}/return")
-def return_transaction(tx_id: int, data: ReturnIn, db: Session = Depends(get_db)):
+def return_transaction(
+    tx_id: int,
+    data: ReturnIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     t = db.scalar(select(Transaction).where(Transaction.id == tx_id).options(joinedload(Transaction.items)))
     if t is None:
         raise HTTPException(status_code=404, detail="Transaksi tidak ditemukan")
@@ -232,7 +252,11 @@ def return_transaction(tx_id: int, data: ReturnIn, db: Session = Depends(get_db)
 
 
 @router.get("/customers")
-def list_customers(q: str | None = None, db: Session = Depends(get_db)):
+def list_customers(
+    q: str | None = None,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     query = select(Customer).order_by(Customer.name)
     if q:
         query = query.where(Customer.name.ilike(f"%{q}%"))
@@ -240,7 +264,11 @@ def list_customers(q: str | None = None, db: Session = Depends(get_db)):
 
 
 @router.post("/customers", status_code=201)
-def create_customer(data: CustomerIn, db: Session = Depends(get_db)):
+def create_customer(
+    data: CustomerIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     if not data.name.strip():
         raise HTTPException(status_code=422, detail="Nama pelanggan wajib diisi")
     c = Customer(name=data.name.strip(), phone=data.phone)
@@ -251,7 +279,12 @@ def create_customer(data: CustomerIn, db: Session = Depends(get_db)):
 
 
 @router.get("/debts")
-def list_debts(status: str | None = None, customer_id: int | None = None, db: Session = Depends(get_db)):
+def list_debts(
+    status: str | None = None,
+    customer_id: int | None = None,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     q = select(Debt, Customer).join(Customer, Debt.customer_id == Customer.id)
     if status:
         q = q.where(Debt.status == status)
@@ -290,7 +323,12 @@ def list_debts(status: str | None = None, customer_id: int | None = None, db: Se
 
 
 @router.post("/debts/{debt_id}/pay")
-def pay_debt(debt_id: int, data: DebtPayIn, db: Session = Depends(get_db)):
+def pay_debt(
+    debt_id: int,
+    data: DebtPayIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     debt = db.get(Debt, debt_id)
     if debt is None:
         raise HTTPException(status_code=404, detail="Utang tidak ditemukan")

@@ -3,6 +3,7 @@ from sqlalchemy import func, select
 from sqlalchemy.orm import Session
 
 from ..database import get_db
+from ..dependencies import require_auth
 from ..models import Product, StockLog
 from ..schemas import StockAdjustIn
 
@@ -10,7 +11,10 @@ router = APIRouter()
 
 
 @router.get("/stock/alerts")
-def stock_alerts(db: Session = Depends(get_db)):
+def stock_alerts(
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     items = db.scalars(
         select(Product)
         .where(Product.is_active.is_(True), Product.stock <= Product.stock_alert_threshold)
@@ -30,7 +34,11 @@ def stock_alerts(db: Session = Depends(get_db)):
 
 
 @router.post("/stock/adjust")
-def adjust_stock(data: StockAdjustIn, db: Session = Depends(get_db)):
+def adjust_stock(
+    data: StockAdjustIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     p = db.get(Product, data.product_id)
     if p is None:
         raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
@@ -45,7 +53,12 @@ def adjust_stock(data: StockAdjustIn, db: Session = Depends(get_db)):
 
 
 @router.get("/stock/logs")
-def stock_logs(product_id: int | None = None, limit: int = 100, db: Session = Depends(get_db)):
+def stock_logs(
+    product_id: int | None = None,
+    limit: int = 100,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     q = select(StockLog, Product).join(Product, StockLog.product_id == Product.id)
     if product_id:
         q = q.where(StockLog.product_id == product_id)

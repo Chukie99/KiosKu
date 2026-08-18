@@ -1,15 +1,20 @@
 import re
 import uuid
+from pathlib import Path
 
-from fastapi import APIRouter, Depends, HTTPException
+from fastapi import APIRouter, Depends, HTTPException, UploadFile, File
 from sqlalchemy import func, select
 from sqlalchemy.orm import Session, joinedload
 
 from ..database import get_db
+from ..dependencies import require_auth
 from ..models import Category, Product, ProductUnit
 from ..schemas import CategoryIn, CategoryOut, ProductIn, ProductOut
 
 router = APIRouter()
+
+PHOTOS_DIR = Path(__file__).resolve().parent.parent.parent / "data" / "photos"
+PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
 
 def product_to_dict(p: Product) -> dict:
@@ -69,6 +74,7 @@ def list_products(
     favorite: bool | None = None,
     include_inactive: bool = False,
     db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
 ):
     q = select(Product).options(joinedload(Product.category), joinedload(Product.units))
     count_q = select(Product.id)
@@ -89,7 +95,11 @@ def list_products(
 
 
 @router.get("/products/search")
-def search_products(q: str = "", db: Session = Depends(get_db)):
+def search_products(
+    q: str = "",
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     items = db.scalars(
         select(Product)
         .options(joinedload(Product.category), joinedload(Product.units))
@@ -104,7 +114,11 @@ def search_products(q: str = "", db: Session = Depends(get_db)):
 
 
 @router.get("/products/barcode/{code}")
-def get_by_barcode(code: str, db: Session = Depends(get_db)):
+def get_by_barcode(
+    code: str,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     p = db.scalar(
         select(Product)
         .options(joinedload(Product.category), joinedload(Product.units))
@@ -116,7 +130,11 @@ def get_by_barcode(code: str, db: Session = Depends(get_db)):
 
 
 @router.get("/products/{product_id}")
-def get_product(product_id: int, db: Session = Depends(get_db)):
+def get_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     p = db.get(Product, product_id)
     if p is None:
         raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
@@ -124,7 +142,11 @@ def get_product(product_id: int, db: Session = Depends(get_db)):
 
 
 @router.post("/products", response_model=ProductOut, status_code=201)
-def create_product(data: ProductIn, db: Session = Depends(get_db)):
+def create_product(
+    data: ProductIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     if data.price_sell <= 0:
         raise HTTPException(status_code=422, detail="Harga jual tidak boleh 0")
     if data.barcode and db.scalar(select(Product).where(Product.barcode == data.barcode)):
@@ -142,7 +164,12 @@ def create_product(data: ProductIn, db: Session = Depends(get_db)):
 
 
 @router.put("/products/{product_id}", response_model=ProductOut)
-def update_product(product_id: int, data: ProductIn, db: Session = Depends(get_db)):
+def update_product(
+    product_id: int,
+    data: ProductIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     p = db.get(Product, product_id)
     if p is None:
         raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
@@ -163,7 +190,11 @@ def update_product(product_id: int, data: ProductIn, db: Session = Depends(get_d
 
 
 @router.delete("/products/{product_id}")
-def deactivate_product(product_id: int, db: Session = Depends(get_db)):
+def deactivate_product(
+    product_id: int,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     p = db.get(Product, product_id)
     if p is None:
         raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
@@ -173,12 +204,19 @@ def deactivate_product(product_id: int, db: Session = Depends(get_db)):
 
 
 @router.get("/categories", response_model=list[CategoryOut])
-def list_categories(db: Session = Depends(get_db)):
+def list_categories(
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     return db.scalars(select(Category).order_by(Category.name)).all()
 
 
 @router.post("/categories", response_model=CategoryOut, status_code=201)
-def create_category(data: CategoryIn, db: Session = Depends(get_db)):
+def create_category(
+    data: CategoryIn,
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
     if not data.name.strip():
         raise HTTPException(status_code=422, detail="Nama kategori wajib diisi")
     if db.scalar(select(Category).where(Category.name == data.name.strip())):
@@ -188,3 +226,32 @@ def create_category(data: CategoryIn, db: Session = Depends(get_db)):
     db.commit()
     db.refresh(cat)
     return cat
+
+
+@router.post("/products/{product_id}/photo")
+async def upload_product_photo(
+    product_id: int,
+    file: UploadFile = File(...),
+    db: Session = Depends(get_db),
+    _token: str = Depends(require_auth),
+):
+    p = db.get(Product, product_id)
+    if p is None:
+        raise HTTPException(status_code=404, detail="Produk tidak ditemukan")
+    allowed = {"image/jpeg", "image/png", "image/webp"}
+    if file.content_type not in allowed:
+        raise HTTPException(status_code=422, detail="Format foto harus JPG, PNG, atau WebP")
+    ext = file.content_type.split("/")[-1]
+    filename = f"product_{product_id}_{uuid.uuid4().hex[:8]}.{ext}"
+    dest = PHOTOS_DIR / filename
+    content = await file.read()
+    if len(content) > 5 * 1024 * 1024:
+        raise HTTPException(status_code=422, detail="Ukuran foto maksimal 5MB")
+    dest.write_bytes(content)
+    if p.photo_path:
+        old_file = PHOTOS_DIR / p.photo_path
+        if old_file.exists():
+            old_file.unlink(missing_ok=True)
+    p.photo_path = filename
+    db.commit()
+    return {"ok": True, "photo_path": filename}

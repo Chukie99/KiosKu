@@ -1,8 +1,9 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_riverpod/flutter_riverpod.dart';
 import 'package:lucide_icons/lucide_icons.dart';
-import 'package:mobile_scanner/mobile_scanner.dart';
 
 import '../api.dart';
 import '../models.dart';
@@ -17,28 +18,54 @@ class ScanPage extends ConsumerStatefulWidget {
 }
 
 class _ScanPageState extends ConsumerState<ScanPage> {
-  final MobileScannerController _controller = MobileScannerController(
-    formats: const [],
-  );
+  final TextEditingController _controller = TextEditingController();
+  final FocusNode _focusNode = FocusNode();
+  final List<String> _buffer = [];
+  Timer? _bufferTimer;
 
   bool _handling = false;
 
   @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) _focusNode.requestFocus();
+    });
+  }
+
+  @override
   void dispose() {
+    _bufferTimer?.cancel();
     _controller.dispose();
+    _focusNode.dispose();
     super.dispose();
   }
 
-  void _onDetect(BarcodeCapture capture) {
+  void _onKey(KeyEvent event) {
+    if (event is! KeyDownEvent) return;
     if (_handling) return;
-    final raw = capture.barcodes
-        .where((b) => b.rawValue != null && b.rawValue!.isNotEmpty)
-        .map((b) => b.rawValue!)
-        .toList();
-    if (raw.isEmpty) return;
+    final key = event.logicalKey;
+    if (event.character != null && event.character!.isNotEmpty) {
+      _buffer.add(event.character!);
+    } else if (key == LogicalKeyboardKey.enter) {
+      _flushBuffer();
+    } else if (key == LogicalKeyboardKey.backspace && _buffer.isNotEmpty) {
+      _buffer.removeLast();
+    }
+    _bufferTimer?.cancel();
+    _bufferTimer = Timer(const Duration(milliseconds: 80), _flushBuffer);
+  }
+
+  void _flushBuffer() {
+    _bufferTimer?.cancel();
+    _bufferTimer = null;
+    if (_buffer.isEmpty) return;
+    final code = _buffer.join().trim();
+    _buffer.clear();
+    if (code.isEmpty) return;
     _handling = true;
     HapticFeedback.mediumImpact();
-    _processCode(raw.first, resetOnFail: true);
+    _processCode(code, resetOnFail: true);
   }
 
   Future<void> _processCode(String code, {bool resetOnFail = false}) async {
@@ -245,125 +272,112 @@ class _ScanPageState extends ConsumerState<ScanPage> {
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: Colors.black,
-      body: Stack(
-        children: [
-          MobileScanner(
-            controller: _controller,
-            onDetect: _onDetect,
-            errorBuilder: (context, error, child) {
-              return Center(
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      LucideIcons.camera,
-                      size: 48,
-                      color: Colors.white70,
+      backgroundColor: AppColors.primary,
+      body: KeyboardListener(
+        focusNode: _focusNode,
+        autofocus: true,
+        onKeyEvent: _onKey,
+        child: Stack(
+          children: [
+            Center(
+              child: Column(
+                mainAxisAlignment: MainAxisAlignment.center,
+                children: [
+                  Container(
+                    width: 120,
+                    height: 120,
+                    decoration: BoxDecoration(
+                      color: Colors.white.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(28),
                     ),
-                    const SizedBox(height: 12),
-                    const Text(
-                      'Tidak dapat mengakses kamera',
-                      style: TextStyle(color: Colors.white),
+                    child: const Icon(
+                      LucideIcons.qrCode,
+                      size: 60,
+                      color: Colors.white,
                     ),
-                    const SizedBox(height: 12),
-                    ElevatedButton(
-                      onPressed: () => _controller.start(),
-                      child: const Text('Minta Izin'),
+                  ),
+                  const SizedBox(height: 28),
+                  const Text(
+                    'Siap Scan Barcode',
+                    style: TextStyle(
+                      color: Colors.white,
+                      fontSize: 22,
+                      fontWeight: FontWeight.w800,
                     ),
-                  ],
+                  ),
+                  const SizedBox(height: 10),
+                  const Padding(
+                    padding: EdgeInsets.symmetric(horizontal: 32),
+                    child: Text(
+                      'Arahkan scanner USB ke barcode produk, atau ketik kode di bawah lalu tekan Enter.',
+                      textAlign: TextAlign.center,
+                      style: TextStyle(
+                        color: Colors.white70,
+                        fontSize: 14,
+                        height: 1.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 24),
+                  Container(
+                    width: 320,
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 16,
+                      vertical: 4,
+                    ),
+                    decoration: BoxDecoration(
+                      color: Colors.white,
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: TextField(
+                      controller: _controller,
+                      focusNode: _focusNode,
+                      autofocus: true,
+                      onSubmitted: (value) {
+                        if (value.trim().isEmpty) return;
+                        _controller.clear();
+                        _handling = true;
+                        _processCode(value.trim(), resetOnFail: true);
+                      },
+                      decoration: const InputDecoration(
+                        border: InputBorder.none,
+                        hintText: 'Ketik kode barcode / SKU...',
+                        icon: Icon(
+                          LucideIcons.scan,
+                          color: AppColors.primary,
+                        ),
+                      ),
+                      textInputAction: TextInputAction.go,
+                    ),
+                  ),
+                  const SizedBox(height: 16),
+                  TextButton.icon(
+                    style: TextButton.styleFrom(
+                      foregroundColor: Colors.white,
+                    ),
+                    onPressed: _showManualInput,
+                    icon: const Icon(LucideIcons.keyRound, size: 18),
+                    label: const Text('Buka Dialog Input Manual'),
+                  ),
+                ],
+              ),
+            ),
+            Positioned(
+              left: 16,
+              top: 16,
+              child: IconButton(
+                style: IconButton.styleFrom(
+                  backgroundColor: Colors.black26,
                 ),
-              );
-            },
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            top: 0,
-            child: SafeArea(
-              child: Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                child: Row(
-                  children: [
-                    IconButton(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black45,
-                      ),
-                      onPressed: () => Navigator.of(context).pop(),
-                      icon: const Icon(
-                        LucideIcons.arrowLeft,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const Spacer(),
-                    IconButton(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black45,
-                      ),
-                      onPressed: () => _controller.toggleTorch(),
-                      icon: const Icon(
-                        LucideIcons.camera,
-                        color: Colors.white,
-                      ),
-                    ),
-                    const SizedBox(width: 8),
-                    IconButton(
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.black45,
-                      ),
-                      onPressed: _showManualInput,
-                      icon: const Icon(
-                        LucideIcons.keyRound,
-                        color: Colors.white,
-                      ),
-                    ),
-                  ],
+                onPressed: () => Navigator.of(context).pop(),
+                icon: const Icon(
+                  LucideIcons.arrowLeft,
+                  color: Colors.white,
                 ),
               ),
             ),
-          ),
-          Center(
-            child: Container(
-              width: 260,
-              height: 160,
-              decoration: BoxDecoration(
-                border: Border.all(
-                  color: AppColors.primary,
-                  width: 3,
-                ),
-                borderRadius: BorderRadius.circular(16),
-              ),
-            ),
-          ),
-          Positioned(
-            left: 0,
-            right: 0,
-            bottom: 60,
-            child: Column(
-              children: [
-                const Text(
-                  'Arahkan kamera ke barcode produk',
-                  style: TextStyle(
-                    color: Colors.white,
-                    fontSize: 14,
-                    fontWeight: FontWeight.w600,
-                  ),
-                ),
-                const SizedBox(height: 8),
-                OutlinedButton.icon(
-                  style: OutlinedButton.styleFrom(
-                    foregroundColor: Colors.white,
-                    side: const BorderSide(color: Colors.white54),
-                    backgroundColor: Colors.black45,
-                  ),
-                  onPressed: _showManualInput,
-                  icon: const Icon(LucideIcons.keyRound, size: 16),
-                  label: const Text('Input Manual'),
-                ),
-              ],
-            ),
-          ),
-        ],
+          ],
+        ),
       ),
     );
   }

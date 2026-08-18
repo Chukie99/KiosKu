@@ -158,8 +158,8 @@ export default function Debts() {
             <Card key={c.customer_id} className="overflow-hidden">
               <button onClick={() => toggle(c.customer_id)} className="flex w-full flex-wrap items-center justify-between gap-4 px-5 py-4 text-left transition-colors hover:bg-background/50">
                 <div className="flex items-center gap-3">
-                  <div className="rounded-full bg-slateBlue/10 p-3">
-                    <Users size={20} className="text-slateBlue" />
+                  <div className="rounded-full bg-accentGreen/10 p-3">
+                    <Users size={20} className="text-accentGreen" />
                   </div>
                   <div>
                     <p className="font-bold text-textPrimary">{c.customer_name}</p>

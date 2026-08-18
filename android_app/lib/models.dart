@@ -426,3 +426,226 @@ class AppSettings {
     );
   }
 }
+
+class StockAlert {
+  final int id;
+  final String name;
+  final String sku;
+  final double stock;
+  final double stockAlertThreshold;
+  final String status;
+
+  const StockAlert({
+    required this.id,
+    required this.name,
+    required this.sku,
+    required this.stock,
+    required this.stockAlertThreshold,
+    required this.status,
+  });
+
+  factory StockAlert.fromJson(Map<String, dynamic> json) {
+    return StockAlert(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      name: json['name'] as String? ?? '',
+      sku: json['sku'] as String? ?? '',
+      stock: (json['stock'] as num?)?.toDouble() ?? 0,
+      stockAlertThreshold:
+          (json['stock_alert_threshold'] as num?)?.toDouble() ?? 0,
+      status: json['status'] as String? ?? 'menipis',
+    );
+  }
+}
+
+class StockLog {
+  final int id;
+  final int productId;
+  final String productName;
+  final double changeQty;
+  final String reason;
+  final String? referenceId;
+  final String? createdAt;
+
+  const StockLog({
+    required this.id,
+    required this.productId,
+    required this.productName,
+    required this.changeQty,
+    required this.reason,
+    this.referenceId,
+    this.createdAt,
+  });
+
+  factory StockLog.fromJson(Map<String, dynamic> json) {
+    return StockLog(
+      id: (json['id'] as num?)?.toInt() ?? 0,
+      productId: (json['product_id'] as num?)?.toInt() ?? 0,
+      productName: json['product_name'] as String? ?? '',
+      changeQty: (json['change_qty'] as num?)?.toDouble() ?? 0,
+      reason: json['reason'] as String? ?? '',
+      referenceId: json['reference_id']?.toString(),
+      createdAt: json['created_at'] as String?,
+    );
+  }
+}
+
+class ReportSummary {
+  final int totalTransactions;
+  final double omzet;
+  final double avgBelanja;
+  final double itemsSold;
+
+  const ReportSummary({
+    required this.totalTransactions,
+    required this.omzet,
+    required this.avgBelanja,
+    required this.itemsSold,
+  });
+
+  factory ReportSummary.fromJson(Map<String, dynamic> json) {
+    return ReportSummary(
+      totalTransactions: (json['total_transactions'] as num?)?.toInt() ?? 0,
+      omzet: (json['omzet'] as num?)?.toDouble() ?? 0,
+      avgBelanja: (json['avg_belanja'] as num?)?.toDouble() ?? 0,
+      itemsSold: (json['items_sold'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class DailyReport {
+  final String date;
+  final ReportSummary summary;
+  final int transactions;
+
+  const DailyReport({
+    required this.date,
+    required this.summary,
+    required this.transactions,
+  });
+
+  factory DailyReport.fromJson(Map<String, dynamic> json) {
+    final raw = json['summary'];
+    return DailyReport(
+      date: json['date'] as String? ?? '',
+      summary: raw is Map
+          ? ReportSummary.fromJson(Map<String, dynamic>.from(raw))
+          : const ReportSummary(
+              totalTransactions: 0,
+              omzet: 0,
+              avgBelanja: 0,
+              itemsSold: 0,
+            ),
+      transactions: (json['transactions'] as num?)?.toInt() ?? 0,
+    );
+  }
+}
+
+class MonthlyReport {
+  final int month;
+  final int year;
+  final ReportSummary summary;
+  final Map<String, double> daily;
+
+  const MonthlyReport({
+    required this.month,
+    required this.year,
+    required this.summary,
+    required this.daily,
+  });
+
+  factory MonthlyReport.fromJson(Map<String, dynamic> json) {
+    final raw = json['summary'];
+    final rawDaily = json['daily'];
+    final daily = <String, double>{};
+    if (rawDaily is Map) {
+      rawDaily.forEach((key, value) {
+        daily[key.toString()] = (value as num?)?.toDouble() ?? 0;
+      });
+    }
+    return MonthlyReport(
+      month: (json['month'] as num?)?.toInt() ?? DateTime.now().month,
+      year: (json['year'] as num?)?.toInt() ?? DateTime.now().year,
+      summary: raw is Map
+          ? ReportSummary.fromJson(Map<String, dynamic>.from(raw))
+          : const ReportSummary(
+              totalTransactions: 0,
+              omzet: 0,
+              avgBelanja: 0,
+              itemsSold: 0,
+            ),
+      daily: daily,
+    );
+  }
+}
+
+class TopProduct {
+  final int productId;
+  final String productName;
+  final double qtySold;
+  final double revenue;
+
+  const TopProduct({
+    required this.productId,
+    required this.productName,
+    required this.qtySold,
+    required this.revenue,
+  });
+
+  factory TopProduct.fromJson(Map<String, dynamic> json) {
+    return TopProduct(
+      productId: (json['product_id'] as num?)?.toInt() ?? 0,
+      productName: json['product_name'] as String? ?? '',
+      qtySold: (json['qty_sold'] as num?)?.toDouble() ?? 0,
+      revenue: (json['revenue'] as num?)?.toDouble() ?? 0,
+    );
+  }
+}
+
+class BackupFile {
+  final String filename;
+  final int size;
+  final String? createdAt;
+
+  const BackupFile({
+    required this.filename,
+    required this.size,
+    this.createdAt,
+  });
+
+  factory BackupFile.fromJson(Map<String, dynamic> json) {
+    return BackupFile(
+      filename: json['filename'] as String? ?? '',
+      size: (json['size'] as num?)?.toInt() ?? 0,
+      createdAt: json['created_at'] as String?,
+    );
+  }
+
+  String get sizeLabel {
+    if (size >= 1024 * 1024) {
+      return '${(size / (1024 * 1024)).toStringAsFixed(1)} MB';
+    }
+    return '${(size / 1024).toStringAsFixed(1)} KB';
+  }
+}
+
+class HealthInfo {
+  final String status;
+  final String app;
+  final String? time;
+
+  const HealthInfo({
+    required this.status,
+    required this.app,
+    this.time,
+  });
+
+  bool get isOk => status == 'ok';
+
+  factory HealthInfo.fromJson(Map<String, dynamic> json) {
+    return HealthInfo(
+      status: json['status'] as String? ?? '',
+      app: json['app'] as String? ?? '',
+      time: json['time'] as String?,
+    );
+  }
+}

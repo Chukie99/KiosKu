@@ -210,6 +210,19 @@ class SyncNotifier extends AsyncNotifier<int> {
   Future<int> syncNow() async {
     state = const AsyncValue.loading();
     final synced = await _pushPending();
+    try {
+      final api = ref.read(apiProvider);
+      final db = ref.read(dbProvider);
+      final data = await api.syncPull();
+      final rawProducts = data['products'];
+      if (rawProducts is List) {
+        final products = rawProducts
+            .whereType<Map>()
+            .map((e) => Product.fromJson(Map<String, dynamic>.from(e)))
+            .toList();
+        await db.upsertProducts(products);
+      }
+    } catch (_) {}
     state = AsyncValue.data(synced);
     return synced;
   }

@@ -19,6 +19,8 @@ from .routers import transactions as transactions_router
 from .seed import seed_all
 
 WEB_DIST = Path(__file__).resolve().parent.parent.parent / "web_dashboard" / "dist"
+PHOTOS_DIR = Path(__file__).resolve().parent.parent / "data" / "photos"
+PHOTOS_DIR.mkdir(parents=True, exist_ok=True)
 
 BACKUP_THREAD_STARTED = False
 
@@ -65,6 +67,8 @@ app.include_router(reports_router.router, tags=["reports"])
 app.include_router(stock_router.router, tags=["stock"])
 app.include_router(sync_router.router, tags=["sync"])
 app.include_router(backup_router.router, tags=["backup"])
+
+app.mount("/photos", StaticFiles(directory=str(PHOTOS_DIR)), name="photos")
 
 
 @app.get("/health")

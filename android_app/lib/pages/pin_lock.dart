@@ -125,9 +125,13 @@ class _PinLockScreenState extends ConsumerState<PinLockScreen> {
       _error = null;
     });
     try {
-      final res = await ref.read(apiProvider).verifyPin(pin: _pin);
+      final api = ref.read(apiProvider);
+      final res = await api.verifyPin(pin: _pin);
       if (!mounted) return;
       if (res.ok) {
+        if (res.token != null) {
+          await api.saveToken(res.token!);
+        }
         await _unlock();
       } else {
         HapticFeedback.vibrate();
@@ -150,6 +154,12 @@ class _PinLockScreenState extends ConsumerState<PinLockScreen> {
             _pin = '';
           });
         }
+      } else if (e.unauthorized) {
+        HapticFeedback.vibrate();
+        setState(() {
+          _error = 'PIN salah';
+          _pin = '';
+        });
       } else {
         setState(() {
           _error = 'Gagal verifikasi PIN';

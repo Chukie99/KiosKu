@@ -1,21 +1,22 @@
 import 'package:flutter/material.dart';
 
 class AppColors {
-  static const Color primary = Color(0xFF0D6E6E);
-  static const Color primaryDark = Color(0xFF0A4F4F);
-  static const Color slateBlue = Color(0xFF1E3A5F);
-  static const Color success = Color(0xFF16A34A);
-  static const Color warning = Color(0xFFD97706);
-  static const Color danger = Color(0xFFDC2626);
-  static const Color background = Color(0xFFF8FAFC);
+  static const Color primary = Color(0xFFA8402E);
+  static const Color primaryDark = Color(0xFF7E2F21);
+  static const Color accentGreen = Color(0xFF2F5233);
+  static const Color success = Color(0xFF3D7A4A);
+  static const Color warning = Color(0xFFC17A1F);
+  static const Color danger = Color(0xFFB33A3A);
+  static const Color background = Color(0xFFFBF6EC);
   static const Color surface = Color(0xFFFFFFFF);
-  static const Color textPrimary = Color(0xFF1E293B);
-  static const Color textSecondary = Color(0xFF64748B);
-  static const Color border = Color(0xFFE2E8F0);
+  static const Color textPrimary = Color(0xFF2A211C);
+  static const Color textSecondary = Color(0xFF8A7A6B);
+  static const Color border = Color(0xFFE8DCC8);
 }
 
 class AppTheme {
-  static const double radiusCard = 12;
+  static const double radiusCard = 16;
+  static const double radiusButton = 10;
   static const double radiusInput = 8;
   static const double radiusBadge = 999;
 
@@ -23,14 +24,14 @@ class AppTheme {
     final scheme = ColorScheme.fromSeed(
       seedColor: AppColors.primary,
       primary: AppColors.primary,
-      secondary: AppColors.slateBlue,
+      secondary: AppColors.accentGreen,
       surface: AppColors.surface,
       error: AppColors.danger,
     );
     final base = ThemeData(
       useMaterial3: true,
       colorScheme: scheme,
-      fontFamily: 'Inter',
+      fontFamily: 'PlusJakartaSans',
       scaffoldBackgroundColor: AppColors.background,
     );
     return base.copyWith(
@@ -43,6 +44,7 @@ class AppTheme {
           color: AppColors.textPrimary,
           fontSize: 18,
           fontWeight: FontWeight.w700,
+          fontFamily: 'PlusJakartaSans',
         ),
         iconTheme: IconThemeData(color: AppColors.textPrimary),
       ),
@@ -85,9 +87,13 @@ class AppTheme {
           elevation: 0,
           minimumSize: const Size(64, 56),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusCard),
+            borderRadius: BorderRadius.circular(radiusButton),
           ),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'PlusJakartaSans',
+          ),
         ),
       ),
       filledButtonTheme: FilledButtonThemeData(
@@ -96,9 +102,13 @@ class AppTheme {
           foregroundColor: Colors.white,
           minimumSize: const Size(64, 56),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusCard),
+            borderRadius: BorderRadius.circular(radiusButton),
           ),
-          textStyle: const TextStyle(fontSize: 16, fontWeight: FontWeight.w700),
+          textStyle: const TextStyle(
+            fontSize: 16,
+            fontWeight: FontWeight.w700,
+            fontFamily: 'PlusJakartaSans',
+          ),
         ),
       ),
       outlinedButtonTheme: OutlinedButtonThemeData(
@@ -107,15 +117,22 @@ class AppTheme {
           minimumSize: const Size(64, 48),
           side: const BorderSide(color: AppColors.border),
           shape: RoundedRectangleBorder(
-            borderRadius: BorderRadius.circular(radiusCard),
+            borderRadius: BorderRadius.circular(radiusButton),
           ),
-          textStyle: const TextStyle(fontSize: 15, fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(
+            fontSize: 15,
+            fontWeight: FontWeight.w600,
+            fontFamily: 'PlusJakartaSans',
+          ),
         ),
       ),
       textButtonTheme: TextButtonThemeData(
         style: TextButton.styleFrom(
           foregroundColor: AppColors.primary,
-          textStyle: const TextStyle(fontWeight: FontWeight.w600),
+          textStyle: const TextStyle(
+            fontWeight: FontWeight.w600,
+            fontFamily: 'PlusJakartaSans',
+          ),
         ),
       ),
       snackBarTheme: SnackBarThemeData(
@@ -129,12 +146,13 @@ class AppTheme {
       dialogTheme: const DialogTheme(
         backgroundColor: AppColors.surface,
         shape: RoundedRectangleBorder(
-          borderRadius: BorderRadius.all(Radius.circular(radiusCard + 4)),
+          borderRadius: BorderRadius.all(Radius.circular(radiusCard)),
         ),
         titleTextStyle: TextStyle(
           color: AppColors.textPrimary,
           fontSize: 18,
           fontWeight: FontWeight.w700,
+          fontFamily: 'PlusJakartaSans',
         ),
       ),
       bottomSheetTheme: const BottomSheetThemeData(
