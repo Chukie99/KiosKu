@@ -2,7 +2,7 @@ import { useCallback, useState } from 'react'
 import { useNavigate } from 'react-router-dom'
 import { Store } from 'lucide-react'
 import { api, ApiError, setToken } from '../lib/api'
-import { Button, Input } from './ui'
+import { Button, Input } from '../components/ui'
 
 export default function Login() {
   const navigate = useNavigate()
@@ -48,12 +48,6 @@ export default function Login() {
     },
     [pin, navigate]
   )
-
-  const handleKey = (digit: string) => {
-    if (pin.length >= 6) return
-    setPin((p) => p + digit)
-    setError('')
-  }
 
   const handleBackspace = () => {
     setPin((p) => p.slice(0, -1))

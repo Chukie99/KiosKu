@@ -10,9 +10,10 @@ from pathlib import Path
 
 block_cipher = None
 
-# Paths
-SPEC_DIR = os.path.dirname(os.path.abspath(SPECPATH))
+# SPECPATH is the directory containing this .spec file
+SPEC_DIR = SPECPATH
 WEB_DIST = os.path.join(SPEC_DIR, 'web_dashboard', 'dist')
+BACKEND_DIR = os.path.join(SPEC_DIR, 'backend')
 
 a = Analysis(
     ['run.py'],
@@ -20,7 +21,7 @@ a = Analysis(
     binaries=[],
     datas=[
         (WEB_DIST, 'web_dashboard/dist'),
-        ('backend', 'backend'),
+        (BACKEND_DIR, 'backend'),
     ],
     hiddenimports=[
         'uvicorn',
