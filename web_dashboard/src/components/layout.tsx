@@ -4,6 +4,7 @@ import {
   BarChart3,
   LayoutDashboard,
   LogOut,
+  Menu,
   Package,
   PackageCheck,
   Settings,
@@ -11,6 +12,7 @@ import {
   Wallet,
   Wifi,
   WifiOff,
+  X,
 } from 'lucide-react'
 import { api, clearToken } from '../lib/api'
 import { cx } from './ui'
@@ -38,6 +40,7 @@ export default function Layout() {
   const navigate = useNavigate()
   const [now, setNow] = useState(new Date())
   const [online, setOnline] = useState<boolean | null>(null)
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false)
 
   const handleLogout = useCallback(async () => {
     try {
@@ -66,13 +69,25 @@ export default function Layout() {
     }
     check()
     const timer = setInterval(check, 10000)
+
+    const handleOnline = () => { if (!cancelled) check() }
+    const handleOffline = () => { if (!cancelled) setOnline(false) }
+    window.addEventListener('online', handleOnline)
+    window.addEventListener('offline', handleOffline)
+
     return () => {
       cancelled = true
       clearInterval(timer)
+      window.removeEventListener('online', handleOnline)
+      window.removeEventListener('offline', handleOffline)
     }
   }, [])
 
   const title = PAGE_TITLES[location.pathname] ?? 'KiosKu'
+
+  useEffect(() => {
+    setMobileMenuOpen(false)
+  }, [location.pathname])
 
   return (
     <div className="flex h-screen overflow-hidden">
@@ -111,6 +126,13 @@ export default function Layout() {
       <div className="flex min-w-0 flex-1 flex-col">
         <header className="flex h-16 shrink-0 items-center justify-between gap-4 border-b border-border bg-surface px-6">
           <div className="flex items-center gap-3">
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="rounded-lg p-2 text-textSecondary transition-colors hover:bg-background md:hidden"
+              title="Menu"
+            >
+              {mobileMenuOpen ? <X size={20} /> : <Menu size={20} />}
+            </button>
             <div className="flex items-center gap-2 md:hidden">
               <div className="rounded-lg bg-primary p-1.5">
                 <Store size={16} className="text-white" />
@@ -154,6 +176,43 @@ export default function Layout() {
             </button>
           </div>
         </header>
+
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <div className="absolute inset-0 bg-black/50" onClick={() => setMobileMenuOpen(false)} />
+            <div className="absolute left-0 top-0 h-full w-60 bg-accentGreen">
+              <div className="flex items-center gap-3 px-5 py-6">
+                <div className="rounded-xl bg-primary p-2.5 shadow-lg shadow-black/20">
+                  <Store size={22} className="text-white" />
+                </div>
+                <div>
+                  <p className="font-display text-lg font-extrabold leading-tight text-white">KiosKu</p>
+                  <p className="text-[11px] font-medium text-slate-400">Point of Sale</p>
+                </div>
+              </div>
+              <nav className="flex-1 space-y-1 overflow-y-auto px-3 py-2">
+                {NAV_ITEMS.map((item) => (
+                  <NavLink
+                    key={item.to}
+                    to={item.to}
+                    className={({ isActive }) =>
+                      cx(
+                        'flex items-center gap-3 rounded-lg px-3 py-2.5 text-sm font-medium transition-colors',
+                        isActive ? 'bg-primary/85 text-white shadow-md shadow-black/20' : 'text-slate-300 hover:bg-white/5 hover:text-white'
+                      )
+                    }
+                  >
+                    <item.icon size={18} />
+                    {item.label}
+                  </NavLink>
+                ))}
+              </nav>
+              <div className="px-5 py-4">
+                <p className="text-xs text-slate-400">KiosKu v1.0</p>
+              </div>
+            </div>
+          </div>
+        )}
 
         <main className="flex-1 overflow-y-auto bg-background p-6">
           <div className="mx-auto max-w-[1440px]">

@@ -1,5 +1,6 @@
 import threading
 from contextlib import asynccontextmanager
+from datetime import datetime
 from pathlib import Path
 
 from fastapi import FastAPI
@@ -54,13 +55,11 @@ app = FastAPI(title="KiosKu API", version="1.0.0", lifespan=lifespan)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"],
-    allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
 
 app.include_router(auth_router.router, prefix="/auth", tags=["auth"])
-app.include_router(auth_router.router, tags=["settings"])
 app.include_router(products_router.router, tags=["products"])
 app.include_router(transactions_router.router, tags=["transactions"])
 app.include_router(reports_router.router, tags=["reports"])
@@ -73,7 +72,7 @@ app.mount("/photos", StaticFiles(directory=str(PHOTOS_DIR)), name="photos")
 
 @app.get("/health")
 def health():
-    return {"status": "ok", "app": "KiosKu", "time": __import__("datetime").datetime.now().isoformat()}
+    return {"status": "ok", "app": "KiosKu", "time": datetime.now().isoformat()}
 
 
 @app.get("/api")

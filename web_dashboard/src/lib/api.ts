@@ -49,7 +49,7 @@ export async function api<T>(path: string, options: RequestInit = {}): Promise<T
   }
   if (res.status === 401) {
     clearToken()
-    window.location.hash = '#/login'
+    window.location.href = '/login'
     throw new ApiError(401, 'Sesi berakhir, silakan login ulang')
   }
   if (!res.ok) {

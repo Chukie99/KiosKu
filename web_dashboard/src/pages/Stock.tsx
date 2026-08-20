@@ -20,6 +20,11 @@ import {
   Tr,
 } from '../components/ui'
 
+const toNum = (s: string): number => {
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? n : 0
+}
+
 export default function Stock() {
   const [alerts, setAlerts] = useState<StockAlert[]>([])
   const [logs, setLogs] = useState<StockLogItem[]>([])
@@ -70,6 +75,10 @@ export default function Stock() {
       return
     }
     if (!adjTarget) return
+    if (qty < 0 && Math.abs(qty) > adjTarget.stock) {
+      setAdjError(`Pengurangan melebihi stok saat ini (${formatAngka(adjTarget.stock, 2)})`)
+      return
+    }
     setAdjusting(true)
     setAdjError(null)
     try {
@@ -256,9 +265,4 @@ export default function Stock() {
       </Modal>
     </div>
   )
-}
-
-const toNum = (s: string): number => {
-  const n = parseFloat(s)
-  return Number.isFinite(n) ? n : 0
 }

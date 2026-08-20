@@ -164,6 +164,9 @@ class ApiClient {
   }
 
   Future<VerifyPinResult> verifyPin({required String pin}) async {
+    if (pin.isEmpty || pin.length > 6) {
+      throw const ApiException('PIN tidak valid');
+    }
     await _ensureBaseUrl();
     final data = await _wrap(
       () => _dio.post<dynamic>('/auth/verify-pin', data: {'pin': pin}),
@@ -294,6 +297,9 @@ class ApiClient {
   }
 
   Future<Category> addCategory(String name) async {
+    if (name.trim().isEmpty) {
+      throw const ApiException('Nama kategori tidak boleh kosong');
+    }
     await _ensureBaseUrl();
     final data = await _wrap(
       () => _dio.post<dynamic>('/categories', data: {'name': name}),
@@ -310,6 +316,12 @@ class ApiClient {
     String? barcode,
     String unitBase = 'pcs',
   }) async {
+    if (name.trim().isEmpty) {
+      throw const ApiException('Nama produk tidak boleh kosong');
+    }
+    if (priceSell <= 0) {
+      throw const ApiException('Harga jual harus lebih dari 0');
+    }
     await _ensureBaseUrl();
     final data = await _wrap(
       () => _dio.post<dynamic>('/products', data: {
@@ -453,16 +465,20 @@ class ApiClient {
     required String savePath,
   }) async {
     await _ensureBaseUrl();
-    await _dio.download(
-      '/reports/export',
-      savePath,
-      queryParameters: {
-        'format': format,
-        'date_from': dateFrom,
-        'date_to': dateTo,
-      },
-    );
-    return savePath;
+    try {
+      await _dio.download(
+        '/reports/export',
+        savePath,
+        queryParameters: {
+          'format': format,
+          'date_from': dateFrom,
+          'date_to': dateTo,
+        },
+      );
+      return savePath;
+    } on DioException catch (e) {
+      throw _mapError(e);
+    }
   }
 
   Future<Transaction> createTransaction({

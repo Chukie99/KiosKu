@@ -23,6 +23,11 @@ import {
   cx,
 } from '../components/ui'
 
+const toNum = (s: string): number => {
+  const n = parseFloat(s)
+  return Number.isFinite(n) ? n : 0
+}
+
 function dueBadge(due: string | null) {
   if (!due) return <Badge color="slate">Tanpa jatuh tempo</Badge>
   const today = new Date()
@@ -86,6 +91,10 @@ export default function Debts() {
     if (!payTarget) return
     if (!(amount > 0)) {
       setPayError('Nominal harus lebih dari 0')
+      return
+    }
+    if (amount > payTarget.debt.remaining) {
+      setPayError(`Nominal melebihi sisa utang (${formatRupiah(payTarget.debt.remaining)})`)
       return
     }
     setPaying(true)
@@ -313,9 +322,4 @@ export default function Debts() {
       </Modal>
     </div>
   )
-}
-
-const toNum = (s: string): number => {
-  const n = parseFloat(s)
-  return Number.isFinite(n) ? n : 0
 }

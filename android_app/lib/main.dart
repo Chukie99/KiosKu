@@ -176,6 +176,7 @@ class _MainShellState extends ConsumerState<MainShell> {
 
   Future<void> _verifyOwnerPin() async {
     final controller = TextEditingController();
+    final isLoading = ValueNotifier<bool>(false);
     final ok = await showDialog<bool>(
       context: context,
       builder: (dialogContext) {
@@ -192,16 +193,32 @@ class _MainShellState extends ConsumerState<MainShell> {
                 ),
               ),
               const SizedBox(height: 12),
-              TextField(
-                controller: controller,
-                autofocus: true,
-                obscureText: true,
-                keyboardType: TextInputType.number,
-                maxLength: 4,
-                decoration: const InputDecoration(
-                  labelText: 'PIN',
-                  counterText: '',
-                ),
+              ValueListenableBuilder<bool>(
+                valueListenable: isLoading,
+                builder: (_, loading, __) {
+                  return TextField(
+                    controller: controller,
+                    autofocus: true,
+                    obscureText: true,
+                    keyboardType: TextInputType.number,
+                    maxLength: 4,
+                    enabled: !loading,
+                    decoration: InputDecoration(
+                      labelText: 'PIN',
+                      counterText: '',
+                      suffixIcon: loading
+                          ? const Padding(
+                              padding: EdgeInsets.all(12),
+                              child: SizedBox(
+                                width: 16,
+                                height: 16,
+                                child: CircularProgressIndicator(strokeWidth: 2),
+                              ),
+                            )
+                          : null,
+                    ),
+                  );
+                },
               ),
             ],
           ),
@@ -210,38 +227,61 @@ class _MainShellState extends ConsumerState<MainShell> {
               onPressed: () => Navigator.pop(dialogContext, false),
               child: const Text('Batal'),
             ),
-            FilledButton(
-              onPressed: () => Navigator.pop(dialogContext, true),
-              child: const Text('Masuk'),
+            ValueListenableBuilder<bool>(
+              valueListenable: isLoading,
+              builder: (_, loading, __) {
+                return FilledButton(
+                  onPressed: loading ? null : () => Navigator.pop(dialogContext, true),
+                  child: loading
+                      ? const SizedBox(
+                          width: 16,
+                          height: 16,
+                          child: CircularProgressIndicator(strokeWidth: 2, color: Colors.white),
+                        )
+                      : const Text('Masuk'),
+                );
+              },
             ),
           ],
         );
       },
     );
-    if (ok != true || !mounted) return;
-    final pin = controller.text.trim();
-    var valid = false;
     try {
-      final result = await ref.read(apiProvider).verifyPin(pin: pin);
-      valid = result.ok;
-    } on ApiException catch (e) {
-      if (e.offline) {
-        final prefs = await SharedPreferences.getInstance();
-        final stored = prefs.getString('pin_hash');
-        valid = stored != null && stored == hashPin(pin);
+      if (ok != true || !mounted) return;
+      final pin = controller.text.trim();
+      if (pin.length != 4) {
+        if (!mounted) return;
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PIN harus 4 digit')),
+        );
+        return;
       }
-    }
-    if (!mounted) return;
-    if (valid) {
-      setState(() {
-        _unlockedPemilik = true;
-        _mode = AppMode.pemilik;
-        _index = 0;
-      });
-    } else {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('PIN salah')),
-      );
+      var valid = false;
+      isLoading.value = true;
+      try {
+        final result = await ref.read(apiProvider).verifyPin(pin: pin);
+        valid = result.ok;
+      } on ApiException catch (e) {
+        if (e.offline) {
+          final prefs = await SharedPreferences.getInstance();
+          final stored = prefs.getString('pin_hash');
+          valid = stored != null && stored == hashPin(pin);
+        }
+      }
+      if (!mounted) return;
+      if (valid) {
+        setState(() {
+          _unlockedPemilik = true;
+          _mode = AppMode.pemilik;
+          _index = 0;
+        });
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(content: Text('PIN salah')),
+        );
+      }
+    } finally {
+      controller.dispose();
     }
   }
 

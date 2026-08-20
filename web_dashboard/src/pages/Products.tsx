@@ -118,6 +118,14 @@ export default function Products() {
   const [photoFile, setPhotoFile] = useState<File | null>(null)
   const [photoPreview, setPhotoPreview] = useState<string | null>(null)
 
+  useEffect(() => {
+    return () => {
+      if (photoPreview && photoPreview.startsWith('blob:')) {
+        URL.revokeObjectURL(photoPreview)
+      }
+    }
+  }, [photoPreview])
+
   const load = useCallback(async () => {
     setLoading(true)
     setError(null)
@@ -519,6 +527,9 @@ export default function Products() {
                   onChange={(e) => {
                     const file = e.target.files?.[0]
                     if (file) {
+                      if (photoPreview && photoPreview.startsWith('blob:')) {
+                        URL.revokeObjectURL(photoPreview)
+                      }
                       setPhotoFile(file)
                       setPhotoPreview(URL.createObjectURL(file))
                     }

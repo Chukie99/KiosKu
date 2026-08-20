@@ -18,7 +18,7 @@ import {
   XAxis,
   YAxis,
 } from 'recharts'
-import { api, errMsg } from '../lib/api'
+import { api, errMsg, getToken } from '../lib/api'
 import { formatAngka, formatRupiah, formatRupiahCompact, formatTanggalWaktu } from '../lib/format'
 import type { DailyReport, MonthlyReport, Transaction, TransactionListResponse } from '../lib/types'
 import {
@@ -76,6 +76,31 @@ export default function Reports() {
   const [transactions, setTransactions] = useState<Transaction[]>([])
   const [loading, setLoading] = useState(true)
   const [error, setError] = useState<string | null>(null)
+  const [exporting, setExporting] = useState<string | null>(null)
+
+  const handleExport = async (format: 'xlsx' | 'pdf') => {
+    setExporting(format)
+    try {
+      const token = getToken()
+      const res = await fetch(`/reports/export?format=${format}&date_from=${from}&date_to=${to}`, {
+        headers: token ? { Authorization: `Bearer ${token}` } : {},
+      })
+      if (!res.ok) throw new Error(`Export gagal (${res.status})`)
+      const blob = await res.blob()
+      const url = URL.createObjectURL(blob)
+      const a = document.createElement('a')
+      a.href = url
+      a.download = `laporan_kiosku_${from}_${to}.${format}`
+      document.body.appendChild(a)
+      a.click()
+      document.body.removeChild(a)
+      URL.revokeObjectURL(url)
+    } catch (e) {
+      setError(errMsg(e))
+    } finally {
+      setExporting(null)
+    }
+  }
 
   const load = useCallback(async () => {
     if (!from || !to) return
@@ -170,18 +195,30 @@ export default function Reports() {
           <Input type="date" className="w-44" value={to} min={from} onChange={(e) => setTo(e.target.value)} />
         </div>
         <div className="ml-auto flex gap-2">
-          <a
-            href={`/reports/export?format=xlsx&date_from=${from}&date_to=${to}`}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-textPrimary transition-colors hover:bg-background"
+          <button
+            onClick={() => handleExport('xlsx')}
+            disabled={exporting === 'xlsx'}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-textPrimary transition-colors hover:bg-background disabled:opacity-50"
           >
-            <FileSpreadsheet size={16} className="text-success" /> Export Excel
-          </a>
-          <a
-            href={`/reports/export?format=pdf&date_from=${from}&date_to=${to}`}
-            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-textPrimary transition-colors hover:bg-background"
+            {exporting === 'xlsx' ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-success border-t-transparent" />
+            ) : (
+              <FileSpreadsheet size={16} className="text-success" />
+            )}
+            Export Excel
+          </button>
+          <button
+            onClick={() => handleExport('pdf')}
+            disabled={exporting === 'pdf'}
+            className="inline-flex items-center gap-2 rounded-lg border border-border bg-surface px-4 py-2 text-sm font-semibold text-textPrimary transition-colors hover:bg-background disabled:opacity-50"
           >
-            <FileText size={16} className="text-danger" /> Export PDF
-          </a>
+            {exporting === 'pdf' ? (
+              <span className="h-4 w-4 animate-spin rounded-full border-2 border-danger border-t-transparent" />
+            ) : (
+              <FileText size={16} className="text-danger" />
+            )}
+            Export PDF
+          </button>
         </div>
       </Card>
 

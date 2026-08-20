@@ -4,11 +4,12 @@ from sqlalchemy import (
     Boolean,
     Date,
     DateTime,
-    Float,
     ForeignKey,
     Integer,
+    Numeric,
     String,
     Text,
+    func,
 )
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
@@ -20,7 +21,7 @@ class Category(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
     products: Mapped[list["Product"]] = relationship(back_populates="category")
 
@@ -32,17 +33,17 @@ class Product(Base):
     sku: Mapped[str | None] = mapped_column(String, unique=True, index=True)
     barcode: Mapped[str | None] = mapped_column(String, unique=True, index=True, nullable=True)
     name: Mapped[str] = mapped_column(String, nullable=False, index=True)
-    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"))
+    category_id: Mapped[int | None] = mapped_column(ForeignKey("categories.id"), index=True)
     photo_path: Mapped[str | None] = mapped_column(String, nullable=True)
     unit_base: Mapped[str] = mapped_column(String, default="pcs")
-    price_buy: Mapped[float] = mapped_column(Float, default=0)
-    price_sell: Mapped[float] = mapped_column(Float, nullable=False)
-    stock: Mapped[float] = mapped_column(Float, default=0)
-    stock_alert_threshold: Mapped[float] = mapped_column(Float, default=5)
+    price_buy: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    price_sell: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    stock: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    stock_alert_threshold: Mapped[float] = mapped_column(Numeric(12, 2), default=5)
     is_favorite: Mapped[bool] = mapped_column(Boolean, default=False)
     is_active: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
-    updated_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, onupdate=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+    updated_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), onupdate=func.now())
 
     category: Mapped[Category | None] = relationship(back_populates="products")
     units: Mapped[list["ProductUnit"]] = relationship(back_populates="product", cascade="all, delete-orphan")
@@ -52,10 +53,10 @@ class ProductUnit(Base):
     __tablename__ = "product_units"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False, index=True)
     unit_name: Mapped[str] = mapped_column(String, nullable=False)
-    conversion_qty: Mapped[float] = mapped_column(Float, nullable=False)
-    price_sell: Mapped[float] = mapped_column(Float, nullable=False)
+    conversion_qty: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    price_sell: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
 
     product: Mapped[Product] = relationship(back_populates="units")
 
@@ -66,7 +67,9 @@ class Customer(Base):
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     name: Mapped[str] = mapped_column(String, nullable=False)
     phone: Mapped[str | None] = mapped_column(String, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
+
+    debts: Mapped[list["Debt"]] = relationship(back_populates="customer")
 
 
 class Transaction(Base):
@@ -74,17 +77,17 @@ class Transaction(Base):
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
     invoice_no: Mapped[str] = mapped_column(String, unique=True, nullable=False)
-    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True)
-    total_amount: Mapped[float] = mapped_column(Float, nullable=False)
-    discount_amount: Mapped[float] = mapped_column(Float, default=0)
+    customer_id: Mapped[int | None] = mapped_column(ForeignKey("customers.id"), nullable=True, index=True)
+    total_amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    discount_amount: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
     payment_method: Mapped[str] = mapped_column(String, nullable=False)
-    cash_received: Mapped[float | None] = mapped_column(Float, nullable=True)
-    change_amount: Mapped[float | None] = mapped_column(Float, nullable=True)
+    cash_received: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
+    change_amount: Mapped[float | None] = mapped_column(Numeric(12, 2), nullable=True)
     payment_split_json: Mapped[str | None] = mapped_column(Text, nullable=True)
     status: Mapped[str] = mapped_column(String, default="selesai")
     device_id: Mapped[str | None] = mapped_column(String, nullable=True)
-    synced: Mapped[bool] = mapped_column(Boolean, default=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now, index=True)
+    synced: Mapped[bool] = mapped_column(Boolean, default=True, index=True)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now(), index=True)
 
     items: Mapped[list["TransactionItem"]] = relationship(
         back_populates="transaction", cascade="all, delete-orphan"
@@ -96,13 +99,13 @@ class TransactionItem(Base):
     __tablename__ = "transaction_items"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id"), nullable=False)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
+    transaction_id: Mapped[int] = mapped_column(ForeignKey("transactions.id"), nullable=False, index=True)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False, index=True)
     product_name_snapshot: Mapped[str] = mapped_column(String, nullable=False)
     unit_name: Mapped[str] = mapped_column(String, nullable=False)
-    qty: Mapped[float] = mapped_column(Float, nullable=False)
-    price_per_unit: Mapped[float] = mapped_column(Float, nullable=False)
-    subtotal: Mapped[float] = mapped_column(Float, nullable=False)
+    qty: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    price_per_unit: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    subtotal: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
 
     transaction: Mapped[Transaction] = relationship(back_populates="items")
 
@@ -111,15 +114,15 @@ class Debt(Base):
     __tablename__ = "debts"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), nullable=False)
+    customer_id: Mapped[int] = mapped_column(ForeignKey("customers.id"), nullable=False, index=True)
     transaction_id: Mapped[int | None] = mapped_column(ForeignKey("transactions.id"), nullable=True)
-    amount: Mapped[float] = mapped_column(Float, nullable=False)
-    amount_paid: Mapped[float] = mapped_column(Float, default=0)
-    status: Mapped[str] = mapped_column(String, default="belum_lunas")
+    amount: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
+    amount_paid: Mapped[float] = mapped_column(Numeric(12, 2), default=0)
+    status: Mapped[str] = mapped_column(String, default="belum_lunas", index=True)
     due_date: Mapped[str | None] = mapped_column(Date, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
-    customer: Mapped[Customer] = relationship()
+    customer: Mapped[Customer] = relationship(back_populates="debts")
     transaction: Mapped[Transaction | None] = relationship(back_populates="debts")
 
 
@@ -127,11 +130,11 @@ class StockLog(Base):
     __tablename__ = "stock_logs"
 
     id: Mapped[int] = mapped_column(Integer, primary_key=True, autoincrement=True)
-    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False)
-    change_qty: Mapped[float] = mapped_column(Float, nullable=False)
+    product_id: Mapped[int] = mapped_column(ForeignKey("products.id"), nullable=False, index=True)
+    change_qty: Mapped[float] = mapped_column(Numeric(12, 2), nullable=False)
     reason: Mapped[str] = mapped_column(String, nullable=False)
     reference_id: Mapped[int | None] = mapped_column(Integer, nullable=True)
-    created_at: Mapped[datetime] = mapped_column(DateTime, default=datetime.now)
+    created_at: Mapped[datetime] = mapped_column(DateTime, server_default=func.now())
 
 
 class AppSetting(Base):
